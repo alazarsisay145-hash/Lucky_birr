@@ -1,28 +1,29 @@
 # Lucky Birr
 
-Lucky Birr is a Telegram Mini App style raffle interface with tiered tickets, payment proof upload flow, admin confirmation, and live draw simulation.
+Lucky Birr is a Telegram Mini App lottery game served from a single HTML app with a minimal Express server for Render deployment.
 
 ## Project Structure
 
-- `Index.html` – main HTML entry (loads external CSS/JS)
-- `styles.css` – all UI styling
-- `app.js` – app logic and interactions
-- `manifest.webmanifest` – optional install metadata
-- `.gitignore` – ignores local/editor/system files
+- `index.html` – main app entry and client-side game logic
+- `server.js` – minimal Express static file server
+- `render.yaml` – Render service configuration
+- `bot.js` – unused placeholder file
 
 ## Run Locally
 
-Open `Index.html` directly in your browser, or serve with any static server.
+```bash
+npm install
+npm start
+```
+
+Then open `http://localhost:3000`.
 
 ## Telegram Integration
 
-The app detects Telegram WebApp automatically when loaded inside Telegram.
+The app detects Telegram WebApp automatically when loaded inside Telegram, with browser fallbacks for local testing.
 
-Set your real app/bot URL in `app.js`:
+## Admin Access
 
-- `const WEBAPP_URL = 'https://t.me/LuckyBirrBot';`
+Tap the Admin button and enter the default PIN `1234`.
 
-## Notes
-
-- File name is `Index.html` (capital I) in this repository.
-- Browser fallbacks are included for non-Telegram usage.
+> Warning: this PIN is client-side only and is not real authentication. Change the `ADMIN_PIN_PARTS` value in `index.html` before production, and do not rely on it to protect sensitive operations.

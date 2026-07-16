@@ -1,0 +1,11 @@
+{
+  "name": "lucky-birr",
+  "version": "1.0.0",
+  "description": "Lucky Birr Telegram Mini App",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -742,6 +742,9 @@
 
         // ===== TELEGRAM WEBAPP =====
         let tg = null;
+        const WEBAPP_URL = window.location.href || 'https://t.me/LuckyBirrBot';
+        const ADMIN_PIN = '1234';
+        const STORAGE_KEY = 'luckyBirrTierTickets';
         try {
             tg = window.Telegram.WebApp;
             tg.ready();
@@ -777,11 +780,14 @@
         };
 
         let currentTier = 'standard';
+        let tierTickets = {};
         let tickets = [];
         let isAdmin = false;
         let selectedTicket = null;
         let drawInProgress = false;
         let screenshotFile = null;
+        let drawCountdownTimer = null;
+        let drawTimeRemaining = 45;
 
         function getCurrentPlayerName() {
             const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
@@ -797,19 +803,68 @@
             return user ? user.id.toString() : 'local_player';
         }
 
-        function initTier(tierKey) {
-            currentTier = tierKey;
-            const t = TIERS[tierKey];
-            tickets = [];
-            for (let i = 1; i <= t.tickets; i++) {
-                tickets.push({ num: i, status: 'empty', buyer: '' });
+        function createEmptyTickets(count) {
+            const items = [];
+            for (let i = 1; i <= count; i++) {
+                items.push({ num: i, status: 'empty', buyer: '', playerName: '', playerPhone: '' });
             }
-            renderTierButtons();
-            renderPrizes();
+            return items;
+        }
+
+        function normalizeTicket(ticket, index) {
+            return {
+                num: ticket && ticket.num ? ticket.num : index + 1,
+                status: ticket && ['empty', 'pending', 'sold'].includes(ticket.status) ? ticket.status : 'empty',
+                buyer: ticket && ticket.buyer ? ticket.buyer : '',
+                playerName: ticket && ticket.playerName ? ticket.playerName : '',
+                playerPhone: ticket && ticket.playerPhone ? ticket.playerPhone : ''
+            };
+        }
+
+        function ensureTierTicketsInitialized() {
+            Object.keys(TIERS).forEach(key => {
+                const ticketCount = TIERS[key].tickets;
+                if (!Array.isArray(tierTickets[key]) || tierTickets[key].length !== ticketCount) {
+                    tierTickets[key] = createEmptyTickets(ticketCount);
+                    return;
+                }
+                tierTickets[key] = tierTickets[key].map((ticket, index) => normalizeTicket(ticket, index));
+            });
+        }
+
+        function loadTierTickets() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                tierTickets = stored ? JSON.parse(stored) : {};
+            } catch (error) {
+                console.log('Storage unavailable', error);
+                tierTickets = {};
+            }
+            ensureTierTicketsInitialized();
+        }
+
+        function saveTierTickets() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tierTickets));
+            } catch (error) {
+                console.log('Could not save tickets', error);
+            }
+        }
+
+        function refreshCurrentTier() {
             renderTickets();
             updateStats();
             updateAdminPanel();
             renderMyTickets();
+        }
+
+        function initTier(tierKey) {
+            currentTier = tierKey;
+            ensureTierTicketsInitialized();
+            tickets = tierTickets[tierKey];
+            renderTierButtons();
+            renderPrizes();
+            refreshCurrentTier();
         }
 
         function renderTierButtons() {
@@ -999,34 +1054,44 @@
         }
 
         function markPending() {
-            const name = document.getElementById('buyerName').value.trim() || 'Unknown';
-            tickets[selectedTicket - 1] = { 
-                num: selectedTicket, 
-                status: 'pending', 
+            if (!selectedTicket) return;
+            const currentTicket = tickets[selectedTicket - 1] || {};
+            const name = document.getElementById('buyerName').value.trim() || currentTicket.playerName || currentTicket.buyer || 'Unknown';
+            tickets[selectedTicket - 1] = {
+                num: selectedTicket,
+                status: 'pending',
                 buyer: name,
                 playerName: name,
-                playerPhone: ''
+                playerPhone: currentTicket.playerPhone || ''
             };
-            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+            saveTierTickets();
+            closeModal();
+            refreshCurrentTier();
         }
 
         function markSold() {
+            if (!selectedTicket) return;
             const name = document.getElementById('buyerName').value.trim() || 'Unknown';
-            const currentTicket = tickets[selectedTicket - 1];
-            tickets[selectedTicket - 1] = { 
-                num: selectedTicket, 
-                status: 'sold', 
+            const currentTicket = tickets[selectedTicket - 1] || {};
+            tickets[selectedTicket - 1] = {
+                num: selectedTicket,
+                status: 'sold',
                 buyer: name,
                 playerName: currentTicket.playerName || name,
                 playerPhone: currentTicket.playerPhone || ''
             };
+            saveTierTickets();
             playSound('sold');
-            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+            closeModal();
+            refreshCurrentTier();
         }
 
         function clearTicket() {
-            tickets[selectedTicket - 1] = { num: selectedTicket, status: 'empty', buyer: '' };
-            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+            if (!selectedTicket) return;
+            tickets[selectedTicket - 1] = { num: selectedTicket, status: 'empty', buyer: '', playerName: '', playerPhone: '' };
+            saveTierTickets();
+            closeModal();
+            refreshCurrentTier();
         }
 
         function showPaymentInfo() {
@@ -1035,6 +1100,7 @@
         }
 
         function reserveTicket() {
+            if (!selectedTicket) return;
             const name = document.getElementById('buyerName').value.trim();
             const phone = document.getElementById('buyerPhone').value.trim();
 
@@ -1054,19 +1120,20 @@
                 return;
             }
 
-            // Mark as pending with name+phone
             const displayName = name + ' (' + phone + ')';
-            tickets[selectedTicket - 1] = { 
-                num: selectedTicket, 
-                status: 'pending', 
+            tickets[selectedTicket - 1] = {
+                num: selectedTicket,
+                status: 'pending',
                 buyer: displayName,
                 playerName: name,
                 playerPhone: phone
             };
 
+            saveTierTickets();
             playSound('tap');
             showToast('🎫 Ticket #' + String(selectedTicket).padStart(2,'0') + ' reserved for ' + name);
-            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+            closeModal();
+            refreshCurrentTier();
         }
 
         function closeModal() {
@@ -1077,13 +1144,23 @@
         }
 
         function toggleAdmin() {
+            if (!isAdmin) {
+                const enteredPin = window.prompt('Enter 4-digit admin PIN');
+                if (enteredPin === null) return;
+                if (enteredPin !== ADMIN_PIN) {
+                    playSound('error');
+                    showToast('❌ Incorrect admin PIN');
+                    return;
+                }
+            }
             isAdmin = !isAdmin;
             const btn = document.getElementById('adminToggle');
             const panel = document.getElementById('adminPanel');
-            btn.classList.toggle('active');
-            panel.classList.toggle('active');
+            btn.classList.toggle('active', isAdmin);
+            panel.classList.toggle('active', isAdmin);
             btn.textContent = isAdmin ? '🔒 Admin' : '👤 Admin';
             if (isAdmin) updateAdminPanel();
+            renderMyTickets();
         }
 
         function copyText(text, el) {
@@ -1112,27 +1189,7 @@
 
         document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
 
-        function sendScreenshot() {
-            const amount = document.getElementById('paymentAmount').value;
-            const tier = TIERS[currentTier];
-            if (!screenshotFile || !amount) {
-                playSound('error');
-                showToast('Please upload screenshot and enter amount');
-                return;
-            }
-            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : {};
-            if (tg && tg.sendData) {
-                tg.sendData(JSON.stringify({
-                    action: 'payment_proof',
-                    amount: amount,
-                    tier: currentTier,
-                    tierPrice: tier.price,
-                    user: user,
-                    timestamp: new Date().toISOString()
-                }));
-            }
-            playSound('sold');
-            showToast('📨 Sent to admin! Waiting for confirmation...');
+        function resetUploadForm() {
             screenshotFile = null;
             document.getElementById('fileInput').value = '';
             document.getElementById('paymentAmount').value = '';
@@ -1142,11 +1199,88 @@
             document.getElementById('sendBtn').disabled = true;
         }
 
+        function sendScreenshot() {
+            const amount = document.getElementById('paymentAmount').value;
+            const tier = TIERS[currentTier];
+            if (!screenshotFile || !amount) {
+                playSound('error');
+                showToast('Please upload screenshot and enter amount');
+                return;
+            }
+            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : {};
+            const payload = {
+                action: 'payment_proof',
+                amount: amount,
+                tier: currentTier,
+                tierPrice: tier.price,
+                screenshotName: screenshotFile.name,
+                user: user,
+                timestamp: new Date().toISOString()
+            };
+            let shared = false;
+            if (tg && tg.sendData) {
+                tg.sendData(JSON.stringify(payload));
+                shared = true;
+            } else if (tg && tg.openTelegramLink) {
+                const shareText = `Lucky Birr payment proof for ${tier.name} tier (${amount} ETB). Please send screenshot image to @LuckyBirrAdmin.`;
+                tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL) + '&text=' + encodeURIComponent(shareText));
+                shared = true;
+            }
+            playSound('sold');
+            showToast(shared ? '📨 Payment details shared. Send the screenshot image to @LuckyBirrAdmin.' : '📸 Screenshot saved — send it to @LuckyBirrAdmin on Telegram.');
+            resetUploadForm();
+        }
+
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.textContent = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        function resetDrawUI() {
+            document.getElementById('drawBtn').style.display = 'block';
+            document.getElementById('drawBtn').disabled = drawTimeRemaining > 0 || drawInProgress;
+            document.getElementById('drawCountdown').style.display = 'block';
+            document.getElementById('ballContainer').style.display = 'none';
+            document.getElementById('drawBall').textContent = '?';
+            document.getElementById('drawBall').style.background = '';
+            document.getElementById('drawStatus').textContent = drawTimeRemaining > 0 ? 'Draw starts in...' : 'Ready!';
+        }
+
+        function updateDrawCountdownDisplay() {
+            const m = Math.floor(drawTimeRemaining / 60).toString().padStart(2, '0');
+            const s = (drawTimeRemaining % 60).toString().padStart(2,'0');
+            document.getElementById('drawCountdown').textContent = m + ':' + s;
+            document.getElementById('drawBtn').disabled = drawTimeRemaining > 0 || drawInProgress;
+            if (!drawInProgress) {
+                document.getElementById('drawStatus').textContent = drawTimeRemaining > 0 ? 'Draw starts in...' : 'Ready!';
+            }
+        }
+
+        function stopDrawCountdown() {
+            if (drawCountdownTimer) {
+                clearInterval(drawCountdownTimer);
+                drawCountdownTimer = null;
+            }
+        }
+
+        function startDrawCountdown() {
+            stopDrawCountdown();
+            drawTimeRemaining = 45;
+            resetDrawUI();
+            updateDrawCountdownDisplay();
+            drawCountdownTimer = setInterval(() => {
+                if (drawTimeRemaining > 0) {
+                    drawTimeRemaining -= 1;
+                    updateDrawCountdownDisplay();
+                }
+                if (drawTimeRemaining <= 0) {
+                    stopDrawCountdown();
+                    document.getElementById('drawBtn').disabled = drawInProgress;
+                    document.getElementById('drawStatus').textContent = 'Ready!';
+                }
+            }, 1000);
         }
 
         function showTab(tab) {
@@ -1156,15 +1290,27 @@
             const ids = { home: 'screenHome', draw: 'screenDraw', winners: 'screenWinners', rules: 'screenRules' };
             document.getElementById(ids[tab]).classList.add('active');
             document.querySelectorAll('.nav-btn')[map[tab]].classList.add('active');
+            if (tab === 'draw') {
+                startDrawCountdown();
+            } else {
+                stopDrawCountdown();
+            }
             playSound('tap');
         }
 
         function startDraw() {
             if (drawInProgress) return;
+            if (drawTimeRemaining > 0) {
+                playSound('error');
+                showToast('⏳ Wait for the countdown to finish');
+                return;
+            }
             const sold = tickets.filter(t => t.status === 'sold');
             if (sold.length < 3) { playSound('error'); showToast('Need at least 3 sold tickets!'); return; }
 
             drawInProgress = true;
+            stopDrawCountdown();
+            document.getElementById('drawBtn').disabled = true;
             document.getElementById('drawBtn').style.display = 'none';
             document.getElementById('drawCountdown').style.display = 'none';
             document.getElementById('ballContainer').style.display = 'block';
@@ -1244,70 +1390,66 @@
             document.getElementById('winSold').textContent = sold + ' / ' + t.tickets;
 
             drawInProgress = false;
-            document.getElementById('drawBtn').style.display = 'block';
-            document.getElementById('drawCountdown').style.display = 'block';
-            document.getElementById('ballContainer').style.display = 'none';
-            document.getElementById('drawBall').textContent = '?';
-            document.getElementById('drawBall').style.background = '';
-            document.getElementById('drawStatus').textContent = 'Ready!';
+            drawTimeRemaining = 0;
+            resetDrawUI();
         }
 
         function resetDraw() {
             playSound('tap');
-            const t = TIERS[currentTier];
-            tickets = [];
-            for (let i = 1; i <= t.tickets; i++) tickets.push({ num: i, status: 'empty', buyer: '' });
+            tierTickets[currentTier] = createEmptyTickets(TIERS[currentTier].tickets);
+            tickets = tierTickets[currentTier];
+            saveTierTickets();
             [1, 2, 3].forEach(i => document.getElementById('winner' + i).style.display = 'none');
-            updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets(); showTab('home');
+            drawInProgress = false;
+            drawTimeRemaining = 45;
+            resetDrawUI();
+            refreshCurrentTier();
+            showTab('home');
         }
 
-        let sec = 45;
-        setInterval(() => {
-            sec--;
-            if (sec < 0) sec = 45;
-            const m = Math.floor(sec / 60).toString().padStart(2, '0');
-            const s = (sec % 60).toString().padStart(2,'0');
-            document.getElementById('drawCountdown').textContent = m + ':' + s;
-        }, 1000);
+        async function shareDrawVideo() {
+            playSound('tap');
+            const t = TIERS[currentTier];
+            const sold = tickets.filter(x => x.status === 'sold');
+            const w1 = document.getElementById('w1Name').textContent;
+            const w2 = document.getElementById('w2Name').textContent;
+            const w3 = document.getElementById('w3Name').textContent;
+            const shareText = `🎰 Lucky Birr Draw Results 🇪🇹\n\n` +
+                `${t.name} Tier - ${t.price} ETB\n\n` +
+                `🥇 1st Winner: ${w1} (${t.prizes.first} ETB)\n` +
+                `🥈 2nd Winner: ${w2} (${t.prizes.second} ETB)\n` +
+                `🥉 3rd Winner: ${w3} (${t.prizes.third} ETB)\n\n` +
+                `💰 Total Pool: ${sold.length * t.price} ETB\n` +
+                `🎫 Tickets Sold: ${sold.length}/${t.tickets}`;
 
-        function shareDrawVideo() {
-    playSound('tap');
-    const t = TIERS[currentTier];
-    const sold = tickets.filter(x => x.status === 'sold');
-    const w1 = document.getElementById('w1Name').textContent;
-    const w2 = document.getElementById('w2Name').textContent;
-    const w3 = document.getElementById('w3Name').textContent;
+            try {
+                if (tg && typeof tg.shareToStory === 'function') {
+                    tg.shareToStory(WEBAPP_URL, { text: shareText });
+                    showToast('📹 Shared to Telegram story');
+                    return;
+                }
+                if (navigator.share) {
+                    await navigator.share({ title: 'Lucky Birr Draw Results', text: shareText, url: WEBAPP_URL });
+                    showToast('📹 Results shared');
+                    return;
+                }
+                if (tg && tg.openTelegramLink) {
+                    tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL) + '&text=' + encodeURIComponent(shareText));
+                    showToast('📨 Opened Telegram share');
+                    return;
+                }
+                await navigator.clipboard.writeText(shareText + '\n\n' + WEBAPP_URL);
+                showToast('📋 Results copied! Paste in your group.');
+            } catch (error) {
+                console.log('Share failed', error);
+                showToast('📋 Share unavailable — send results manually in Telegram.');
+            }
+        }
 
-    const shareText = `🎰 *LUCKY BIRR DRAW RESULTS* 🇪🇹\n\n` +
-        `*${t.name} Tier* - ${t.price} ETB\n\n` +
-        `🥇 *1st Winner:* ${w1}\n` +
-        `    Prize: ${t.prizes.first} ETB\n\n` +
-        `🥈 *2nd Winner:* ${w2}\n` +
-        `    Prize: ${t.prizes.second} ETB\n\n` +
-        `🥉 *3rd Winner:* ${w3}\n` +
-        `    Prize: ${t.prizes.third} ETB\n\n` +
-        `💰 Total Pool: ${sold.length * t.price} ETB\n` +
-        `🎫 Tickets Sold: ${sold.length}/20\n\n` +
-        `🎲 Fair & Transparent\n` +
-        `🇪🇹 Made for Ethiopia\n\n` +
-        `👇 Play now:`;
-
-    if (tg && tg.shareGame) {
-        tg.shareGame({
-            title: 'Lucky Birr Draw Results',
-            text: shareText,
-            url: WEBAPP_URL || 'https://t.me/LuckyBirrBot'
-        });
-    } else if (tg && tg.openTelegramLink) {
-        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL || 'https://t.me/LuckyBirrBot') + '&text=' + encodeURIComponent(shareText));
-    } else {
-        navigator.clipboard.writeText(shareText).then(() => {
-            showToast('📋 Results copied! Paste in your group.');
-        });
-    }
-}
-
-initTier('standard');
+        loadTierTickets();
+        initTier('standard');
+        resetDrawUI();
+        updateDrawCountdownDisplay();
     </script>
 </body>
 </html>

@@ -1,1 +1,1313 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0e1a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Lucky Birr</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --card: #111827;
+            --card2: #1a2236;
+            --accent: #f59e0b;
+            --accent2: #10b981;
+            --accent3: #ef4444;
+            --text: #f1f5f9;
+            --text2: #94a3b8;
+            --border: #1e293b;
+            --tg-safe-top: env(safe-area-inset-top, 0px);
+            --tg-safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            padding-top: var(--tg-safe-top);
+            padding-bottom: var(--tg-safe-bottom);
+        }
+
+        .app { 
+            max-width: 500px; 
+            margin: 0 auto; 
+            height: 100vh; 
+            height: 100dvh;
+            display: flex; 
+            flex-direction: column; 
+            position: relative;
+        }
+
+        /* ===== HEADER ===== */
+        .header {
+            background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+            padding: 16px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            position: relative;
+        }
+        .header .flag { font-size: 28px; margin-bottom: 2px; }
+        .header h1 { font-size: 20px; font-weight: 900; color: var(--accent); letter-spacing: -0.5px; }
+        .header .sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+        .live-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(239,68,68,0.15); color: #ef4444;
+            padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700;
+            margin-top: 8px;
+        }
+        .live-pill .dot { width: 5px; height: 5px; background: #ef4444; border-radius: 50%; animation: blink 1.2s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ===== ADMIN PANEL ===== */
+        .admin-panel {
+            display: none;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border-bottom: 2px solid var(--accent);
+            padding: 10px 12px;
+            flex-shrink: 0;
+        }
+        .admin-panel.active { display: block; }
+        .admin-panel-title {
+            font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+        }
+        .admin-stats {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+        }
+        .admin-stat {
+            background: var(--card2); border-radius: 8px; padding: 8px 4px; text-align: center;
+            border: 1px solid var(--border);
+        }
+        .admin-stat .val { font-size: 14px; font-weight: 800; color: var(--accent); }
+        .admin-stat .lbl { font-size: 8px; color: var(--text2); text-transform: uppercase; margin-top: 2px; }
+        .admin-actions {
+            display: flex; gap: 6px; margin-top: 8px;
+        }
+        .admin-actions button {
+            flex: 1; padding: 8px; border-radius: 8px; border: none; font-size: 11px;
+            font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .admin-actions button:active { transform: scale(0.96); }
+        .btn-export { background: var(--accent2); color: white; }
+        .btn-reset { background: var(--accent3); color: white; }
+        .btn-draw { background: var(--accent); color: var(--bg); }
+
+        /* ===== TIER SELECTOR ===== */
+        .tier-bar {
+            display: flex; gap: 6px; padding: 10px 12px;
+            background: var(--card); border-bottom: 1px solid var(--border);
+            overflow-x: auto; flex-shrink: 0;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .tier-bar::-webkit-scrollbar { display: none; }
+        .tier-btn {
+            flex-shrink: 0; padding: 8px 14px; border-radius: 20px;
+            border: 1.5px solid var(--border); background: var(--card2);
+            color: var(--text2); font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        }
+        .tier-btn.active {
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            color: #0f172a; border-color: var(--accent);
+        }
+        .tier-btn .price-tag { font-size: 10px; opacity: 0.8; }
+
+        /* ===== STATS BAR ===== */
+        .stats-bar {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .stat { text-align: center; }
+        .stat .num { font-size: 18px; font-weight: 800; color: var(--accent); }
+        .stat .lbl { font-size: 9px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat .sub-num { font-size: 10px; color: var(--text2); margin-top: 1px; }
+
+        /* ===== PROGRESS ===== */
+        .progress-wrap {
+            padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .progress-top { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+        .progress-top span:last-child { color: var(--accent); font-weight: 600; }
+        .progress-bar { height: 6px; background: var(--card2); border-radius: 3px; overflow: hidden; }
+        .progress-fill {
+            height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 3px; transition: width 0.8s ease;
+        }
+
+        /* ===== CHANCES ===== */
+        .chances-section {
+            padding: 12px; background: var(--card); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .section-title {
+            font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+        }
+        .section-title .dot { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; }
+        .chances-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+        }
+        .chance-box {
+            background: var(--card2); border-radius: 8px; padding: 8px 4px; text-align: center;
+            border: 1px solid var(--border);
+        }
+        .chance-box .emoji { font-size: 16px; }
+        .chance-box .pct { font-size: 13px; font-weight: 700; color: var(--accent); margin-top: 2px; }
+        .chance-box .lbl { font-size: 8px; color: var(--text2); margin-top: 1px; }
+
+        /* ===== PRIZE POOL ===== */
+        .prize-section {
+            padding: 12px; background: var(--card); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .prizes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+        .prize {
+            background: var(--card2); border-radius: 10px; padding: 10px 6px; text-align: center;
+            border: 1px solid var(--border);
+        }
+        .prize .place { font-size: 18px; }
+        .prize .amount { font-size: 13px; font-weight: 800; color: var(--accent); margin-top: 2px; }
+        .prize .label { font-size: 8px; color: var(--text2); margin-top: 1px; }
+
+        /* ===== SCROLLABLE ===== */
+        .scroll-area {
+            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .scroll-area::-webkit-scrollbar { display: none; }
+
+        /* ===== TICKETS ===== */
+        .tickets-section { padding: 12px; }
+        .ticket-grid {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+        }
+        .ticket {
+            background: var(--card2); border: 1.5px solid var(--border); border-radius: 8px;
+            padding: 6px 2px; text-align: center; cursor: pointer; transition: all 0.15s;
+            position: relative; min-height: 52px; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; user-select: none;
+        }
+        .ticket:active { transform: scale(0.95); }
+        .ticket:hover { border-color: var(--accent); }
+        .ticket.sold {
+            background: rgba(16,185,129,0.08); border-color: var(--accent2);
+        }
+        .ticket.pending {
+            background: rgba(245,158,11,0.08); border-color: var(--accent);
+            animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0%,100% { border-color: var(--accent); }
+            50% { border-color: transparent; }
+        }
+        .ticket .num { font-size: 13px; font-weight: 700; color: var(--text); }
+        .ticket .buyer {
+            font-size: 7px; color: var(--accent2); font-weight: 600; margin-top: 1px;
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ticket .status-icon { font-size: 9px; margin-top: 1px; }
+        .ticket.sold .status-icon { color: var(--accent2); }
+        .ticket.pending .status-icon { color: var(--accent); }
+
+        /* ===== PAYMENT ===== */
+        .payment-section { padding: 12px; background: var(--card); border-top: 1px solid var(--border); }
+        .pay-card {
+            background: var(--card2); border-radius: 10px; padding: 10px; margin-bottom: 6px;
+            border: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+        }
+        .pay-card .icon { font-size: 20px; }
+        .pay-card .info { flex: 1; }
+        .pay-card .info .name { font-size: 11px; font-weight: 600; }
+        .pay-card .info .detail { font-size: 10px; color: var(--text2); font-family: monospace; }
+        .pay-card .copy {
+            background: var(--border); border: none; color: var(--text2); padding: 5px 8px;
+            border-radius: 6px; font-size: 9px; cursor: pointer; transition: all 0.2s;
+        }
+        .pay-card .copy:active { transform: scale(0.95); }
+        .pay-card .copy.copied { background: var(--accent2); color: white; }
+
+        /* ===== SCREENSHOT SENDER ===== */
+        .screenshot-section {
+            padding: 12px; background: var(--card); border-top: 1px solid var(--border);
+        }
+        .screenshot-upload {
+            border: 2px dashed var(--border); border-radius: 12px; padding: 16px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: var(--card2);
+        }
+        .screenshot-upload:active { border-color: var(--accent); transform: scale(0.98); }
+        .screenshot-upload .icon { font-size: 28px; }
+        .screenshot-upload .text { font-size: 12px; color: var(--text2); margin-top: 6px; }
+        .screenshot-upload .sub { font-size: 10px; color: var(--text2); opacity: 0.7; margin-top: 4px; }
+        .screenshot-upload.has-file {
+            border-color: var(--accent2); background: rgba(16,185,129,0.05);
+        }
+        .screenshot-upload.has-file .icon { color: var(--accent2); }
+        .amount-input {
+            width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--card2); color: var(--text); font-size: 13px; margin-top: 8px;
+            outline: none; text-align: center; font-weight: 600;
+        }
+        .amount-input:focus { border-color: var(--accent); }
+        .send-btn {
+            width: 100%; padding: 12px; border-radius: 10px; border: none;
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            color: #0f172a; font-size: 14px; font-weight: 700; cursor: pointer;
+            margin-top: 8px; transition: all 0.2s;
+        }
+        .send-btn:active { transform: scale(0.98); }
+        .send-btn:disabled { opacity: 0.5; }
+
+        /* ===== BOTTOM NAV ===== */
+        .bottom-nav {
+            display: flex; justify-content: space-around; padding: 8px;
+            background: var(--card); border-top: 1px solid var(--border);
+            flex-shrink: 0; padding-bottom: calc(8px + var(--tg-safe-bottom));
+        }
+        .nav-btn {
+            background: none; border: none; color: var(--text2); font-size: 9px;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            cursor: pointer; padding: 4px 10px; border-radius: 8px; transition: all 0.2s;
+            flex: 1;
+        }
+        .nav-btn:active { transform: scale(0.95); }
+        .nav-btn.active { color: var(--accent); background: rgba(245,158,11,0.1); }
+        .nav-btn .icon { font-size: 16px; }
+
+        /* ===== SCREENS ===== */
+        .screen { display: none; flex-direction: column; height: 100%; }
+        .screen.active { display: flex; }
+
+        /* ===== DRAW SCREEN ===== */
+        .draw-screen { display: none; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; padding: 20px; text-align: center;
+        }
+        .draw-screen.active { display: flex; }
+        .draw-title { font-size: 13px; color: var(--text2); margin-bottom: 24px; text-transform: uppercase; letter-spacing: 2px; }
+        .draw-countdown { font-size: 42px; font-weight: 900; color: var(--accent); font-family: 'Courier New', monospace; margin: 16px 0; }
+        .draw-ball-container { position: relative; width: 110px; height: 110px; margin: 16px auto; }
+        .draw-ball {
+            width: 110px; height: 110px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px; font-weight: 900; color: #0f172a;
+            box-shadow: 0 0 50px rgba(245,158,11,0.4), inset 0 -4px 20px rgba(0,0,0,0.2);
+            animation: ball-pulse 1s ease-in-out infinite;
+        }
+        @keyframes ball-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        .draw-ball.rolling { animation: ball-spin 0.12s linear infinite; }
+        @keyframes ball-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .draw-status { font-size: 14px; color: var(--text2); margin-top: 24px; min-height: 20px; }
+        .draw-btn {
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            color: #0f172a; border: none; padding: 14px 36px; border-radius: 12px;
+            font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 16px;
+            box-shadow: 0 4px 20px rgba(245,158,11,0.3); transition: all 0.2s;
+        }
+        .draw-btn:active { transform: scale(0.96); }
+        .draw-btn:disabled { opacity: 0.5; }
+
+        /* ===== WINNERS SCREEN ===== */
+        .winners-screen { display: none; padding: 16px 12px; overflow-y: auto; }
+        .winners-screen.active { display: block; }
+        .winners-title { text-align: center; font-size: 16px; font-weight: 800; margin-bottom: 16px; color: var(--accent); }
+        .winner-card {
+            border-radius: 14px; padding: 16px; margin-bottom: 10px; text-align: center;
+            border: 2px solid; position: relative;
+        }
+        .winner-card.first { background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(251,191,36,0.1)); border-color: var(--accent); }
+        .winner-card.second { background: linear-gradient(135deg, rgba(148,163,184,0.15), rgba(203,213,225,0.1)); border-color: #94a3b8; }
+        .winner-card.third { background: linear-gradient(135deg, rgba(180,83,9,0.15), rgba(217,119,6,0.1)); border-color: #d97706; }
+        .winner-card .crown { font-size: 32px; margin-bottom: 6px; }
+        .winner-card .name { font-size: 18px; font-weight: 700; }
+        .winner-card .prize { font-size: 24px; font-weight: 900; margin: 6px 0; }
+        .winner-card.first .prize { color: var(--accent); }
+        .winner-card.second .prize { color: #94a3b8; }
+        .winner-card.third .prize { color: #d97706; }
+        .winner-card .ticket-num { font-size: 12px; color: var(--text2); }
+        .draw-info {
+            background: var(--card2); border-radius: 10px; padding: 12px; margin-top: 12px;
+            border: 1px solid var(--border); text-align: center;
+        }
+        .draw-info .label { font-size: 10px; color: var(--text2); text-transform: uppercase; }
+        .draw-info .value { font-size: 13px; font-weight: 600; margin-top: 2px; }
+        .reset-btn {
+            width: 100%; padding: 12px; border-radius: 10px; border: none;
+            background: var(--card2); color: var(--text); border: 1px solid var(--border);
+            font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 12px;
+        }
+        .reset-btn:active { border-color: var(--accent); }
+
+        /* ===== RULES SCREEN ===== */
+        .rules-screen { display: none; padding: 16px 12px; overflow-y: auto; }
+        .rules-screen.active { display: block; }
+        .rules-card {
+            background: var(--card2); border-radius: 10px; padding: 14px; margin-bottom: 10px;
+            border: 1px solid var(--border);
+        }
+        .rules-card h4 { font-size: 13px; color: var(--accent); margin-bottom: 6px; }
+        .rules-card p, .rules-card li { font-size: 11px; color: var(--text2); line-height: 1.7; }
+        .rules-card ol { margin-left: 14px; }
+        .rules-card li { margin-bottom: 4px; }
+        .step-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; background: var(--accent); color: var(--bg);
+            border-radius: 50%; font-size: 10px; font-weight: 700; margin-right: 6px;
+        }
+
+        /* ===== MODAL ===== */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+            display: none; align-items: flex-end; justify-content: center; z-index: 100;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--card); width: 100%; max-width: 500px; border-radius: 20px 20px 0 0;
+            padding: 20px; border-top: 2px solid var(--accent);
+            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            padding-bottom: calc(20px + var(--tg-safe-bottom));
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal h3 { font-size: 15px; margin-bottom: 10px; }
+        .modal .ticket-info {
+            background: var(--card2); border-radius: 10px; padding: 12px; text-align: center;
+            margin-bottom: 12px; border: 1px solid var(--border);
+        }
+        .modal .ticket-info .big-num { font-size: 28px; font-weight: 900; color: var(--accent); }
+        .modal .ticket-info .price { font-size: 13px; color: var(--text2); margin-top: 2px; }
+        .modal .actions { display: flex; gap: 6px; }
+        .modal .actions button {
+            flex: 1; padding: 10px; border-radius: 10px; border: none; font-size: 12px;
+            font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .modal .actions button:active { transform: scale(0.96); }
+        .modal .actions .btn-sold { background: var(--accent2); color: white; }
+        .modal .actions .btn-pending { background: var(--accent); color: var(--bg); }
+        .modal .actions .btn-cancel { background: var(--card2); color: var(--text2); border: 1px solid var(--border); }
+        .modal .name-input {
+            width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+            background: var(--card2); color: var(--text); font-size: 13px; margin-bottom: 10px;
+            outline: none;
+        }
+        .modal .name-input:focus { border-color: var(--accent); }
+
+        /* Admin toggle */
+        .admin-toggle {
+            position: absolute; top: 8px; right: 8px; z-index: 10;
+            background: var(--card2); border: 1px solid var(--border); color: var(--text2);
+            padding: 4px 10px; border-radius: 16px; font-size: 9px; cursor: pointer;
+        }
+        .admin-toggle.active { background: var(--accent); color: var(--bg); }
+
+        /* Confetti */
+        .confetti-piece {
+            position: fixed; width: 8px; height: 8px; border-radius: 2px;
+            z-index: 200; pointer-events: none;
+            animation: confetti-fall 2.5s ease-out forwards;
+        }
+        @keyframes confetti-fall {
+            0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: var(--card2); color: var(--text); padding: 10px 20px; border-radius: 10px;
+            font-size: 12px; border: 1px solid var(--border); opacity: 0; transition: all 0.3s;
+            z-index: 150; pointer-events: none;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        /* ===== MY TICKETS ===== */
+        .my-tickets-section {
+            padding: 12px; background: var(--card); border-top: 1px solid var(--border);
+            margin-top: 8px;
+        }
+        .my-ticket-card {
+            background: var(--card2); border-radius: 10px; padding: 12px; margin-bottom: 8px;
+            border: 1px solid var(--border); display: flex; align-items: center; gap: 10px;
+            transition: all 0.2s;
+        }
+        .my-ticket-card.pending {
+            border-color: var(--accent);
+            background: rgba(245,158,11,0.05);
+        }
+        .my-ticket-card.sold {
+            border-color: var(--accent2);
+            background: rgba(16,185,129,0.05);
+        }
+        .my-ticket-card .ticket-badge {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: var(--card); border: 1.5px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700; color: var(--accent);
+            flex-shrink: 0;
+        }
+        .my-ticket-card.pending .ticket-badge {
+            border-color: var(--accent); color: var(--accent);
+        }
+        .my-ticket-card.sold .ticket-badge {
+            border-color: var(--accent2); color: var(--accent2);
+        }
+        .my-ticket-card .info { flex: 1; }
+        .my-ticket-card .info .tier-name { font-size: 12px; font-weight: 600; }
+        .my-ticket-card .info .status { font-size: 10px; color: var(--text2); margin-top: 2px; }
+        .my-ticket-card .info .status.pending { color: var(--accent); }
+        .my-ticket-card .info .status.sold { color: var(--accent2); }
+        .my-ticket-card .price { font-size: 12px; font-weight: 700; color: var(--text); }
+        .empty-state {
+            text-align: center; padding: 20px; color: var(--text2); font-size: 12px;
+        }
+        .empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+
+        #fileInput { display: none; }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="app">
+        <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">👤 Admin</button>
+
+        <div class="header">
+            <div class="flag">🇪🇹</div>
+            <h1>🎰 LUCKY BIRR</h1>
+            <p class="sub">Telegram Mini App • Live Draw • Instant Win</p>
+            <div class="live-pill"><div class="dot"></div> LIVE</div>
+        </div>
+
+        <!-- ADMIN PANEL -->
+        <div class="admin-panel" id="adminPanel">
+            <div class="admin-panel-title">🔒 Admin Dashboard</div>
+            <div class="admin-stats">
+                <div class="admin-stat"><div class="val" id="adminSold">0</div><div class="lbl">Sold</div></div>
+                <div class="admin-stat"><div class="val" id="adminPending">0</div><div class="lbl">Pending</div></div>
+                <div class="admin-stat"><div class="val" id="adminPool">0</div><div class="lbl">Pool ETB</div></div>
+                <div class="admin-stat"><div class="val" id="adminProfit">0</div><div class="lbl">Profit ETB</div></div>
+            </div>
+            <div class="admin-actions">
+                <button class="btn-export" onclick="exportData()">📊 Export</button>
+                <button class="btn-draw" onclick="showTab('draw')">🎲 Draw</button>
+                <button class="btn-reset" onclick="resetDraw()">🔄 Reset</button>
+            </div>
+        </div>
+
+        <!-- HOME SCREEN -->
+        <div class="screen active" id="screenHome">
+            <div class="tier-bar" id="tierBar"></div>
+
+            <div class="stats-bar">
+                <div class="stat"><div class="num" id="soldCount">0</div><div class="lbl">Sold</div><div class="sub-num">/ <span id="totalTickets">20</span></div></div>
+                <div class="stat"><div class="num" id="poolAmount">0</div><div class="lbl">Pool</div><div class="sub-num">ETB</div></div>
+                <div class="stat"><div class="num" id="remaining">20</div><div class="lbl">Left</div><div class="sub-num">tickets</div></div>
+            </div>
+
+            <div class="progress-wrap">
+                <div class="progress-top"><span>Progress</span><span id="progressText">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+            </div>
+
+            <div class="chances-section">
+                <div class="section-title"><div class="dot"></div> Your Chances</div>
+                <div class="chances-grid">
+                    <div class="chance-box"><div class="emoji">🥇</div><div class="pct">5%</div><div class="lbl">1st Prize</div></div>
+                    <div class="chance-box"><div class="emoji">🥈</div><div class="pct">5%</div><div class="lbl">2nd Prize</div></div>
+                    <div class="chance-box"><div class="emoji">🥉</div><div class="pct">5%</div><div class="lbl">3rd Prize</div></div>
+                    <div class="chance-box"><div class="emoji">❌</div><div class="pct">85%</div><div class="lbl">No Win</div></div>
+                </div>
+            </div>
+
+            <div class="prize-section">
+                <div class="section-title"><div class="dot"></div> Prize Pool</div>
+                <div class="prizes" id="prizesRow"></div>
+            </div>
+
+            <div class="scroll-area">
+                <div class="tickets-section">
+                    <div class="section-title"><div class="dot"></div> Tap to Buy</div>
+                    <div class="ticket-grid" id="ticketGrid"></div>
+                </div>
+
+                <!-- MY TICKETS SECTION -->
+                <div class="my-tickets-section" id="myTicketsSection" style="display:none;">
+                    <div class="section-title"><div class="dot"></div> My Tickets</div>
+                    <div class="my-tickets-list" id="myTicketsList"></div>
+                </div>
+
+                <div class="payment-section">
+                    <div class="section-title"><div class="dot"></div> Payment</div>
+                    <div class="pay-card">
+                        <div class="icon">📱</div>
+                        <div class="info"><div class="name">Telebirr</div><div class="detail">0936 719 379</div></div>
+                        <button class="copy" onclick="copyText('0936719379', this)">Copy</button>
+                    </div>
+                    <div class="pay-card">
+                        <div class="icon">🏦</div>
+                        <div class="info"><div class="name">Dashen Bank</div><div class="detail">5236 2713 5901 1</div></div>
+                        <button class="copy" onclick="copyText('5236271359011', this)">Copy</button>
+                    </div>
+                    <div class="pay-card">
+                        <div class="icon">👤</div>
+                        <div class="info"><div class="name">Name</div><div class="detail">Alazar Sisay</div></div>
+                        <button class="copy" onclick="copyText('Alazar Sisay', this)">Copy</button>
+                    </div>
+                </div>
+
+                <div class="screenshot-section">
+                    <div class="section-title"><div class="dot"></div> Send Payment Proof</div>
+                    <div class="screenshot-upload" id="screenshotUpload" onclick="document.getElementById('fileInput').click()">
+                        <div class="icon" id="uploadIcon">📤</div>
+                        <div class="text" id="uploadText">Tap to upload payment screenshot</div>
+                        <div class="sub">Telebirr, Dashen, or CBE receipt</div>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+                    <input type="number" class="amount-input" id="paymentAmount" placeholder="Amount paid (ETB)" min="10">
+                    <button class="send-btn" id="sendBtn" onclick="sendScreenshot()" disabled>
+                        📨 Send to Admin
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DRAW SCREEN -->
+        <div class="draw-screen" id="screenDraw">
+            <div class="draw-title">🎲 Live Draw</div>
+            <div class="draw-countdown" id="drawCountdown">00:45</div>
+            <div style="font-size: 12px; color: var(--text2);">Draw starts in...</div>
+            <div class="draw-ball-container" id="ballContainer" style="display:none;">
+                <div class="draw-ball" id="drawBall">?</div>
+            </div>
+            <div class="draw-status" id="drawStatus">Ready!</div>
+            <button class="draw-btn" id="drawBtn" onclick="startDraw()">🎬 START DRAW</button>
+        </div>
+
+        <!-- WINNERS SCREEN -->
+        <div class="winners-screen" id="screenWinners">
+            <div class="winners-title">🏆 Results</div>
+            <div class="winner-card first" id="winner1" style="display:none;">
+                <div class="crown">🥇</div>
+                <div class="name" id="w1Name">---</div>
+                <div class="prize" id="w1Prize">---</div>
+                <div class="ticket-num" id="w1Ticket">---</div>
+            </div>
+            <div class="winner-card second" id="winner2" style="display:none;">
+                <div class="crown">🥈</div>
+                <div class="name" id="w2Name">---</div>
+                <div class="prize" id="w2Prize">---</div>
+                <div class="ticket-num" id="w2Ticket">---</div>
+            </div>
+            <div class="winner-card third" id="winner3" style="display:none;">
+                <div class="crown">🥉</div>
+                <div class="name" id="w3Name">---</div>
+                <div class="prize" id="w3Prize">---</div>
+                <div class="ticket-num" id="w3Ticket">---</div>
+            </div>
+            <div class="draw-info">
+                <div class="label">Pool</div>
+                <div class="value" id="winPool">0 ETB</div>
+            </div>
+            <div class="draw-info">
+                <div class="label">Sold</div>
+                <div class="value" id="winSold">0 / 20</div>
+            </div>
+            <button class="reset-btn" onclick="shareDrawVideo()" style="background: linear-gradient(135deg, var(--accent), #fbbf24); color: #0f172a; border: none;">
+    📹 Share Draw Video
+</button>
+<button class="reset-btn" onclick="resetDraw()">🔄 New Round</button>
+        </div>
+
+        <!-- RULES SCREEN -->
+        <div class="rules-screen" id="screenRules">
+            <div class="section-title"><div class="dot"></div> How to Play</div>
+            <div class="rules-card">
+                <h4>🎫 Buy a Ticket</h4>
+                <ol>
+                    <li><span class="step-badge">1</span>Pick your tier & number</li>
+                    <li><span class="step-badge">2</span>Pay via Telebirr or Dashen</li>
+                    <li><span class="step-badge">3</span>Upload screenshot + amount</li>
+                    <li><span class="step-badge">4</span>Admin confirms ✅</li>
+                </ol>
+            </div>
+            <div class="rules-card">
+                <h4>🎲 The Draw</h4>
+                <p>Live video draw when tickets sell out. 3 random winners picked from all sold tickets. 15% chance to win!</p>
+            </div>
+            <div class="rules-card">
+                <h4>💰 Tiers</h4>
+                <p><strong>Mini:</strong> 10 ETB → 100/30/20<br>
+                <strong>Standard:</strong> 50 ETB → 500/150/100<br>
+                <strong>Premium:</strong> 200 ETB → 2,000/600/400</p>
+            </div>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal-overlay" id="modal">
+            <div class="modal">
+                <h3>🎫 Ticket <span id="modalTicketNum"></span></h3>
+                <div class="ticket-info">
+                    <div class="big-num" id="modalBigNum">01</div>
+                    <div class="price" id="modalPrice">50 ETB</div>
+                </div>
+                <input type="text" class="name-input" id="buyerName" placeholder="Buyer name" style="display:none;">
+                <div class="actions" id="modalActions"></div>
+            </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+
+        <div class="bottom-nav">
+            <button class="nav-btn active" onclick="showTab('home')">
+                <span class="icon">🎫</span><span>Buy</span>
+            </button>
+            <button class="nav-btn" onclick="showTab('draw')">
+                <span class="icon">🎲</span><span>Draw</span>
+            </button>
+            <button class="nav-btn" onclick="showTab('winners')">
+                <span class="icon">🏆</span><span>Win</span>
+            </button>
+            <button class="nav-btn" onclick="showTab('rules')">
+                <span class="icon">📋</span><span>Rules</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ===== SOUND EFFECTS =====
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+        function initAudio() { if (!audioCtx) audioCtx = new AudioCtx(); }
+        function playSound(type) {
+            initAudio();
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            switch(type) {
+                case 'tap':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                    osc.start(now); osc.stop(now + 0.1);
+                    break;
+                case 'sold':
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.setValueAtTime(659, now + 0.1);
+                    osc.frequency.setValueAtTime(784, now + 0.2);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc.start(now); osc.stop(now + 0.4);
+                    break;
+                case 'win':
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(523, now);
+                    osc.frequency.setValueAtTime(659, now + 0.15);
+                    osc.frequency.setValueAtTime(784, now + 0.3);
+                    osc.frequency.setValueAtTime(1047, now + 0.45);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+                    osc.start(now); osc.stop(now + 0.8);
+                    break;
+                case 'roll':
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(200 + Math.random() * 400, now);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now); osc.stop(now + 0.05);
+                    break;
+                case 'error':
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                    osc.start(now); osc.stop(now + 0.2);
+                    break;
+            }
+        }
+
+        // ===== TELEGRAM WEBAPP =====
+        let tg = null;
+        try {
+            tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+            tg.setHeaderColor('#0a0e1a');
+            tg.setBackgroundColor('#0a0e1a');
+            if (tg.BackButton) tg.BackButton.hide();
+        } catch(e) { console.log('Not in Telegram'); }
+
+        // ===== TIER CONFIG - EXACT PRIZES =====
+        const TIERS = {
+            mini: {
+                name: 'Mini',
+                price: 10,
+                tickets: 20,
+                prizes: { first: 100, second: 30, third: 20 },
+                profit: 50
+            },
+            standard: {
+                name: 'Standard',
+                price: 50,
+                tickets: 20,
+                prizes: { first: 500, second: 150, third: 100 },
+                profit: 250
+            },
+            premium: {
+                name: 'Premium',
+                price: 200,
+                tickets: 20,
+                prizes: { first: 2000, second: 600, third: 400 },
+                profit: 1000
+            }
+        };
+
+        let currentTier = 'standard';
+        let tickets = [];
+        let isAdmin = false;
+        let selectedTicket = null;
+        let drawInProgress = false;
+        let screenshotFile = null;
+
+        function getCurrentPlayerName() {
+            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
+                ? tg.initDataUnsafe.user 
+                : null;
+            return user ? (user.username || user.first_name || 'Player') : 'Player';
+        }
+
+        function getCurrentPlayerId() {
+            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
+                ? tg.initDataUnsafe.user 
+                : null;
+            return user ? user.id.toString() : 'local_player';
+        }
+
+        function initTier(tierKey) {
+            currentTier = tierKey;
+            const t = TIERS[tierKey];
+            tickets = [];
+            for (let i = 1; i <= t.tickets; i++) {
+                tickets.push({ num: i, status: 'empty', buyer: '' });
+            }
+            renderTierButtons();
+            renderPrizes();
+            renderTickets();
+            updateStats();
+            updateAdminPanel();
+            renderMyTickets();
+        }
+
+        function renderTierButtons() {
+            const bar = document.getElementById('tierBar');
+            bar.innerHTML = '';
+            Object.keys(TIERS).forEach(key => {
+                const t = TIERS[key];
+                const btn = document.createElement('button');
+                btn.className = 'tier-btn ' + (key === currentTier ? 'active' : '');
+                btn.innerHTML = `${t.name}<br><span class="price-tag">${t.price} ETB</span>`;
+                btn.onclick = () => { playSound('tap'); initTier(key); };
+                bar.appendChild(btn);
+            });
+        }
+
+        function renderPrizes() {
+            const t = TIERS[currentTier];
+            const row = document.getElementById('prizesRow');
+            row.innerHTML = `
+                <div class="prize"><div class="place">🥇</div><div class="amount">${t.prizes.first.toLocaleString()}</div><div class="label">1st</div></div>
+                <div class="prize"><div class="place">🥈</div><div class="amount">${t.prizes.second.toLocaleString()}</div><div class="label">2nd</div></div>
+                <div class="prize"><div class="place">🥉</div><div class="amount">${t.prizes.third.toLocaleString()}</div><div class="label">3rd</div></div>
+            `;
+        }
+
+        function renderTickets() {
+            const grid = document.getElementById('ticketGrid');
+            grid.innerHTML = '';
+            tickets.forEach(t => {
+                const div = document.createElement('div');
+                div.className = `ticket ${t.status}`;
+                div.onclick = () => { playSound('tap'); openTicket(t.num); };
+                let icon = t.status === 'sold' ? '✅' : t.status === 'pending' ? '⏳' : '';
+                div.innerHTML = `
+                    <div class="num">#${String(t.num).padStart(2,'0')}</div>
+                    ${t.buyer ? `<div class="buyer">${t.buyer}</div>` : ''}
+                    ${icon ? `<div class="status-icon">${icon}</div>` : ''}
+                `;
+                grid.appendChild(div);
+            });
+        }
+
+        function renderMyTickets() {
+            const myId = getCurrentPlayerId();
+            const myName = getCurrentPlayerName();
+            const section = document.getElementById('myTicketsSection');
+            const list = document.getElementById('myTicketsList');
+
+            // Find all tickets that belong to this player
+            const myTickets = tickets.filter(t => 
+                t.buyer && (t.buyer === myName || t.buyer.includes(myName) || 
+                (t.playerName && t.playerName === myName))
+            );
+
+            if (myTickets.length === 0 && !isAdmin) {
+                section.style.display = 'none';
+                return;
+            }
+
+            // For admin, show ALL tickets with buyer info
+            const displayTickets = isAdmin ? tickets.filter(t => t.status !== 'empty') : myTickets;
+
+            if (displayTickets.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            list.innerHTML = '';
+
+            displayTickets.forEach(t => {
+                const card = document.createElement('div');
+                card.className = `my-ticket-card ${t.status}`;
+                const statusText = t.status === 'pending' ? '⏳ Waiting for admin...' : '✅ Confirmed!';
+                const statusClass = t.status;
+                const playerInfo = t.playerPhone ? `${t.playerName || t.buyer} · ${t.playerPhone}` : (t.playerName || t.buyer);
+
+                card.innerHTML = `
+                    <div class="ticket-badge">#${String(t.num).padStart(2,'0')}</div>
+                    <div class="info">
+                        <div class="tier-name">${TIERS[currentTier].name} - ${TIERS[currentTier].price} ETB</div>
+                        <div class="status ${statusClass}">${statusText}</div>
+                        ${isAdmin ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;">${playerInfo}</div>` : ''}
+                    </div>
+                    <div class="price">${t.status === 'pending' ? '⏳' : '✅'}</div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function updateStats() {
+            const t = TIERS[currentTier];
+            const sold = tickets.filter(x => x.status === 'sold').length;
+            const pending = tickets.filter(x => x.status === 'pending').length;
+            document.getElementById('soldCount').textContent = sold;
+            document.getElementById('poolAmount').textContent = (sold * t.price).toLocaleString();
+            document.getElementById('remaining').textContent = t.tickets - sold - pending;
+            document.getElementById('totalTickets').textContent = t.tickets;
+            const pct = Math.round((sold / t.tickets) * 100);
+            document.getElementById('progressFill').style.width = pct + '%';
+            document.getElementById('progressText').textContent = pct + '%';
+        }
+
+        function updateAdminPanel() {
+            const t = TIERS[currentTier];
+            const sold = tickets.filter(x => x.status === 'sold').length;
+            const pending = tickets.filter(x => x.status === 'pending').length;
+            document.getElementById('adminSold').textContent = sold;
+            document.getElementById('adminPending').textContent = pending;
+            document.getElementById('adminPool').textContent = (sold * t.price).toLocaleString();
+            const totalPrizes = t.prizes.first + t.prizes.second + t.prizes.third;
+            document.getElementById('adminProfit').textContent = (sold * t.price - (sold >= 3 ? totalPrizes : 0)).toLocaleString();
+        }
+
+        function exportData() {
+            const t = TIERS[currentTier];
+            const sold = tickets.filter(x => x.status === 'sold');
+            const pending = tickets.filter(x => x.status === 'pending');
+            let data = `🎰 LUCKY BIRR - ${t.name} TIER
+`;
+            data += `Price: ${t.price} ETB | Pool: ${sold.length * t.price} ETB
+
+`;
+            data += `✅ SOLD (${sold.length}):
+`;
+            sold.forEach(x => data += `  #${String(x.num).padStart(2,'0')} - ${x.buyer}
+`);
+            data += `
+⏳ PENDING (${pending.length}):
+`;
+            pending.forEach(x => data += `  #${String(x.num).padStart(2,'0')} - ${x.buyer}
+`);
+            navigator.clipboard.writeText(data).then(() => {
+                showToast('📊 Data copied to clipboard!');
+            });
+        }
+
+        function openTicket(num) {
+            selectedTicket = num;
+            const t = tickets[num - 1];
+            const tier = TIERS[currentTier];
+            document.getElementById('modalTicketNum').textContent = String(num).padStart(2,'0');
+            document.getElementById('modalBigNum').textContent = String(num).padStart(2,'0');
+            document.getElementById('modalPrice').textContent = tier.price + ' ETB';
+
+            const nameInput = document.getElementById('buyerName');
+            const actions = document.getElementById('modalActions');
+
+            if (isAdmin) {
+                nameInput.style.display = 'block';
+                nameInput.value = t.buyer || '';
+                actions.innerHTML = `
+                    <button class="btn-pending" onclick="markPending()">⏳ Pending</button>
+                    <button class="btn-sold" onclick="markSold()">✅ Sold</button>
+                    <button class="btn-cancel" onclick="clearTicket()">🗑️</button>
+                `;
+            } else {
+                nameInput.style.display = 'block';
+                nameInput.placeholder = 'Your name';
+                nameInput.value = '';
+
+                // Add phone input
+                let phoneInput = document.getElementById('buyerPhone');
+                if (!phoneInput) {
+                    phoneInput = document.createElement('input');
+                    phoneInput.type = 'tel';
+                    phoneInput.className = 'name-input';
+                    phoneInput.id = 'buyerPhone';
+                    phoneInput.placeholder = 'Your phone number';
+                    nameInput.parentNode.insertBefore(phoneInput, actions);
+                }
+                phoneInput.style.display = 'block';
+                phoneInput.value = '';
+
+                if (t.status === 'empty') {
+                    actions.innerHTML = `
+                        <button class="btn-pending" onclick="reserveTicket()">🎫 Reserve Ticket</button>
+                        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                    `;
+                } else {
+                    actions.innerHTML = `<button class="btn-cancel" onclick="closeModal()">Close</button>`;
+                    nameInput.style.display = 'none';
+                    phoneInput.style.display = 'none';
+                }
+            }
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function markPending() {
+            const name = document.getElementById('buyerName').value.trim() || 'Unknown';
+            tickets[selectedTicket - 1] = { 
+                num: selectedTicket, 
+                status: 'pending', 
+                buyer: name,
+                playerName: name,
+                playerPhone: ''
+            };
+            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+        }
+
+        function markSold() {
+            const name = document.getElementById('buyerName').value.trim() || 'Unknown';
+            const currentTicket = tickets[selectedTicket - 1];
+            tickets[selectedTicket - 1] = { 
+                num: selectedTicket, 
+                status: 'sold', 
+                buyer: name,
+                playerName: currentTicket.playerName || name,
+                playerPhone: currentTicket.playerPhone || ''
+            };
+            playSound('sold');
+            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+        }
+
+        function clearTicket() {
+            tickets[selectedTicket - 1] = { num: selectedTicket, status: 'empty', buyer: '' };
+            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+        }
+
+        function showPaymentInfo() {
+            showToast('📱 Telebirr: 0936719379 | 🏦 Dashen: 5236271359011');
+            closeModal();
+        }
+
+        function reserveTicket() {
+            const name = document.getElementById('buyerName').value.trim();
+            const phone = document.getElementById('buyerPhone').value.trim();
+
+            if (!name) {
+                playSound('error');
+                showToast('❌ Please enter your name');
+                return;
+            }
+            if (!phone) {
+                playSound('error');
+                showToast('❌ Please enter your phone number');
+                return;
+            }
+            if (phone.length < 9) {
+                playSound('error');
+                showToast('❌ Phone number too short');
+                return;
+            }
+
+            // Mark as pending with name+phone
+            const displayName = name + ' (' + phone + ')';
+            tickets[selectedTicket - 1] = { 
+                num: selectedTicket, 
+                status: 'pending', 
+                buyer: displayName,
+                playerName: name,
+                playerPhone: phone
+            };
+
+            playSound('tap');
+            showToast('🎫 Ticket #' + String(selectedTicket).padStart(2,'0') + ' reserved for ' + name);
+            closeModal(); updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            const phoneInput = document.getElementById('buyerPhone');
+            if (phoneInput) phoneInput.remove();
+            selectedTicket = null;
+        }
+
+        function toggleAdmin() {
+            isAdmin = !isAdmin;
+            const btn = document.getElementById('adminToggle');
+            const panel = document.getElementById('adminPanel');
+            btn.classList.toggle('active');
+            panel.classList.toggle('active');
+            btn.textContent = isAdmin ? '🔒 Admin' : '👤 Admin';
+            if (isAdmin) updateAdminPanel();
+        }
+
+        function copyText(text, el) {
+            navigator.clipboard.writeText(text).then(() => {
+                el.textContent = '✓';
+                el.classList.add('copied');
+                setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('copied'); }, 1500);
+            }).catch(() => showToast('Copied: ' + text));
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            screenshotFile = file;
+            const upload = document.getElementById('screenshotUpload');
+            document.getElementById('uploadIcon').textContent = '✅';
+            document.getElementById('uploadText').textContent = file.name;
+            upload.classList.add('has-file');
+            checkSendReady();
+        }
+
+        function checkSendReady() {
+            const amount = document.getElementById('paymentAmount').value;
+            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0);
+        }
+
+        document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
+
+        function sendScreenshot() {
+            const amount = document.getElementById('paymentAmount').value;
+            const tier = TIERS[currentTier];
+            if (!screenshotFile || !amount) {
+                playSound('error');
+                showToast('Please upload screenshot and enter amount');
+                return;
+            }
+            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : {};
+            if (tg && tg.sendData) {
+                tg.sendData(JSON.stringify({
+                    action: 'payment_proof',
+                    amount: amount,
+                    tier: currentTier,
+                    tierPrice: tier.price,
+                    user: user,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+            playSound('sold');
+            showToast('📨 Sent to admin! Waiting for confirmation...');
+            screenshotFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('paymentAmount').value = '';
+            document.getElementById('screenshotUpload').classList.remove('has-file');
+            document.getElementById('uploadIcon').textContent = '📤';
+            document.getElementById('uploadText').textContent = 'Tap to upload payment screenshot';
+            document.getElementById('sendBtn').disabled = true;
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2500);
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll('.screen, .draw-screen, .winners-screen, .rules-screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const map = { home: 0, draw: 1, winners: 2, rules: 3 };
+            const ids = { home: 'screenHome', draw: 'screenDraw', winners: 'screenWinners', rules: 'screenRules' };
+            document.getElementById(ids[tab]).classList.add('active');
+            document.querySelectorAll('.nav-btn')[map[tab]].classList.add('active');
+            playSound('tap');
+        }
+
+        function startDraw() {
+            if (drawInProgress) return;
+            const sold = tickets.filter(t => t.status === 'sold');
+            if (sold.length < 3) { playSound('error'); showToast('Need at least 3 sold tickets!'); return; }
+
+            drawInProgress = true;
+            document.getElementById('drawBtn').style.display = 'none';
+            document.getElementById('drawCountdown').style.display = 'none';
+            document.getElementById('ballContainer').style.display = 'block';
+            const ball = document.getElementById('drawBall');
+            ball.classList.add('rolling');
+
+            const shuffled = [...sold].sort(() => Math.random() - 0.5);
+            const winners = shuffled.slice(0, 3);
+            const t = TIERS[currentTier];
+            const prizes = [t.prizes.first, t.prizes.second, t.prizes.third];
+            const colors = ['linear-gradient(135deg, #f59e0b, #fbbf24)', 'linear-gradient(135deg, #94a3b8, #cbd5e1)', 'linear-gradient(135deg, #b45309, #d97706)'];
+
+            const roll = setInterval(() => {
+                playSound('roll');
+                const r = sold[Math.floor(Math.random() * sold.length)];
+                ball.textContent = '#' + String(r.num).padStart(2,'0');
+            }, 80);
+
+            [0, 1, 2].forEach(i => {
+                setTimeout(() => {
+                    document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
+                    setTimeout(() => {
+                        clearInterval(roll);
+                        ball.classList.remove('rolling');
+                        ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
+                        ball.style.background = colors[i];
+                        ball.style.animation = 'none'; ball.offsetHeight;
+                        ball.style.animation = 'ball-pulse 0.5s ease-in-out 3';
+                        playSound('win');
+
+                        if (i < 2) {
+                            setTimeout(() => {
+                                ball.classList.add('rolling');
+                                const nr = setInterval(() => {
+                                    playSound('roll');
+                                    const r = sold[Math.floor(Math.random() * sold.length)];
+                                    ball.textContent = '#' + String(r.num).padStart(2,'0');
+                                }, 80);
+                                setTimeout(() => clearInterval(nr), 1200);
+                            }, 800);
+                        } else {
+                            setTimeout(() => { createConfetti(); showWinners(winners, prizes); }, 1200);
+                        }
+                    }, 1200);
+                }, i === 0 ? 2000 : i === 1 ? 4500 : 7000);
+            });
+        }
+
+        function createConfetti() {
+            const colors = ['#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899'];
+            for (let i = 0; i < 40; i++) {
+                const p = document.createElement('div');
+                p.className = 'confetti-piece';
+                p.style.left = Math.random() * 100 + 'vw';
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                p.style.animationDelay = Math.random() * 2 + 's';
+                p.style.width = (Math.random() * 6 + 4) + 'px';
+                p.style.height = p.style.width;
+                document.body.appendChild(p);
+                setTimeout(() => p.remove(), 3000);
+            }
+        }
+
+        function showWinners(winners, prizes) {
+            showTab('winners');
+            const t = TIERS[currentTier];
+            ['first', 'second', 'third'].forEach((place, i) => {
+                const card = document.getElementById('winner' + (i + 1));
+                document.getElementById('w' + (i + 1) + 'Name').textContent = winners[i].buyer || 'Anonymous';
+                document.getElementById('w' + (i + 1) + 'Prize').textContent = prizes[i].toLocaleString() + ' ETB';
+                document.getElementById('w' + (i + 1) + 'Ticket').textContent = 'Ticket #' + String(winners[i].num).padStart(2,'0');
+                card.style.display = 'block';
+                card.style.animation = 'slideUp 0.4s ease ' + (i * 0.2) + 's both';
+            });
+            const sold = tickets.filter(x => x.status === 'sold').length;
+            document.getElementById('winPool').textContent = (sold * t.price).toLocaleString() + ' ETB';
+            document.getElementById('winSold').textContent = sold + ' / ' + t.tickets;
+
+            drawInProgress = false;
+            document.getElementById('drawBtn').style.display = 'block';
+            document.getElementById('drawCountdown').style.display = 'block';
+            document.getElementById('ballContainer').style.display = 'none';
+            document.getElementById('drawBall').textContent = '?';
+            document.getElementById('drawBall').style.background = '';
+            document.getElementById('drawStatus').textContent = 'Ready!';
+        }
+
+        function resetDraw() {
+            playSound('tap');
+            const t = TIERS[currentTier];
+            tickets = [];
+            for (let i = 1; i <= t.tickets; i++) tickets.push({ num: i, status: 'empty', buyer: '' });
+            [1, 2, 3].forEach(i => document.getElementById('winner' + i).style.display = 'none');
+            updateStats(); renderTickets(); updateAdminPanel(); renderMyTickets(); showTab('home');
+        }
+
+        let sec = 45;
+        setInterval(() => {
+            sec--;
+            if (sec < 0) sec = 45;
+            const m = Math.floor(sec / 60).toString().padStart(2, '0');
+            const s = (sec % 60).toString().padStart(2,'0');
+            document.getElementById('drawCountdown').textContent = m + ':' + s;
+        }, 1000);
+
+        function shareDrawVideo() {
+    playSound('tap');
+    const t = TIERS[currentTier];
+    const sold = tickets.filter(x => x.status === 'sold');
+    const w1 = document.getElementById('w1Name').textContent;
+    const w2 = document.getElementById('w2Name').textContent;
+    const w3 = document.getElementById('w3Name').textContent;
+
+    const shareText = `🎰 *LUCKY BIRR DRAW RESULTS* 🇪🇹\n\n` +
+        `*${t.name} Tier* - ${t.price} ETB\n\n` +
+        `🥇 *1st Winner:* ${w1}\n` +
+        `    Prize: ${t.prizes.first} ETB\n\n` +
+        `🥈 *2nd Winner:* ${w2}\n` +
+        `    Prize: ${t.prizes.second} ETB\n\n` +
+        `🥉 *3rd Winner:* ${w3}\n` +
+        `    Prize: ${t.prizes.third} ETB\n\n` +
+        `💰 Total Pool: ${sold.length * t.price} ETB\n` +
+        `🎫 Tickets Sold: ${sold.length}/20\n\n` +
+        `🎲 Fair & Transparent\n` +
+        `🇪🇹 Made for Ethiopia\n\n` +
+        `👇 Play now:`;
+
+    if (tg && tg.shareGame) {
+        tg.shareGame({
+            title: 'Lucky Birr Draw Results',
+            text: shareText,
+            url: WEBAPP_URL || 'https://t.me/LuckyBirrBot'
+        });
+    } else if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL || 'https://t.me/LuckyBirrBot') + '&text=' + encodeURIComponent(shareText));
+    } else {
+        navigator.clipboard.writeText(shareText).then(() => {
+            showToast('📋 Results copied! Paste in your group.');
+        });
+    }
+}
+
+initTier('standard');
+    </script>
+</body>
+</html>

@@ -24,4 +24,4 @@ The app detects Telegram WebApp automatically when loaded inside Telegram, with 
 
 ## Admin Access
 
-Tap the Admin button and enter the default PIN `1234`. Change the `ADMIN_PIN` value in `index.html` before production if needed.
+Tap the Admin button and enter the default PIN `1234`. Change the `ADMIN_PIN_PARTS` value in `index.html` before production if needed.

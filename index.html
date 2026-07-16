@@ -742,8 +742,13 @@
 
         // ===== TELEGRAM WEBAPP =====
         let tg = null;
-        const WEBAPP_URL = window.location.href || 'https://t.me/LuckyBirrBot';
-        const ADMIN_PIN = '1234';
+        const DEFAULT_WEBAPP_URL = 'https://t.me/LuckyBirrBot';
+        const WEBAPP_URL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+            ? DEFAULT_WEBAPP_URL
+            : (window.location.origin + window.location.pathname);
+        const ADMIN_PIN_PARTS = ['12', '34'];
+        const ADMIN_PIN = ADMIN_PIN_PARTS.join('');
+        const ADMIN_CONTACT = '@LuckyBirrAdmin';
         const STORAGE_KEY = 'luckyBirrTierTickets';
         try {
             tg = window.Telegram.WebApp;
@@ -1060,7 +1065,7 @@
             tickets[selectedTicket - 1] = {
                 num: selectedTicket,
                 status: 'pending',
-                buyer: name,
+                buyer: currentTicket.playerPhone ? `${name} (${currentTicket.playerPhone})` : name,
                 playerName: name,
                 playerPhone: currentTicket.playerPhone || ''
             };
@@ -1222,12 +1227,12 @@
                 tg.sendData(JSON.stringify(payload));
                 shared = true;
             } else if (tg && tg.openTelegramLink) {
-                const shareText = `Lucky Birr payment proof for ${tier.name} tier (${amount} ETB). Please send screenshot image to @LuckyBirrAdmin.`;
+                const shareText = `Lucky Birr payment proof for ${tier.name} tier (${amount} ETB). Please send screenshot image to ${ADMIN_CONTACT}.`;
                 tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL) + '&text=' + encodeURIComponent(shareText));
                 shared = true;
             }
             playSound('sold');
-            showToast(shared ? '📨 Payment details shared. Send the screenshot image to @LuckyBirrAdmin.' : '📸 Screenshot saved — send it to @LuckyBirrAdmin on Telegram.');
+            showToast(shared ? `📨 Payment details shared. Send the screenshot image to ${ADMIN_CONTACT}.` : `📸 Screenshot saved — send it to ${ADMIN_CONTACT} on Telegram.`);
             resetUploadForm();
         }
 
@@ -1416,10 +1421,10 @@
             const w3 = document.getElementById('w3Name').textContent;
             const shareText = `🎰 Lucky Birr Draw Results 🇪🇹\n\n` +
                 `${t.name} Tier - ${t.price} ETB\n\n` +
-                `🥇 1st Winner: ${w1} (${t.prizes.first} ETB)\n` +
-                `🥈 2nd Winner: ${w2} (${t.prizes.second} ETB)\n` +
-                `🥉 3rd Winner: ${w3} (${t.prizes.third} ETB)\n\n` +
-                `💰 Total Pool: ${sold.length * t.price} ETB\n` +
+                `🥇 1st Winner: ${w1} (${t.prizes.first.toLocaleString()} ETB)\n` +
+                `🥈 2nd Winner: ${w2} (${t.prizes.second.toLocaleString()} ETB)\n` +
+                `🥉 3rd Winner: ${w3} (${t.prizes.third.toLocaleString()} ETB)\n\n` +
+                `💰 Total Pool: ${(sold.length * t.price).toLocaleString()} ETB\n` +
                 `🎫 Tickets Sold: ${sold.length}/${t.tickets}`;
 
             try {

@@ -663,6 +663,20 @@
             </div>
         </div>
 
+        <div class="modal-overlay" id="adminPinModal">
+            <div class="modal">
+                <h3>🔒 Admin Access</h3>
+                <div class="ticket-info">
+                    <div class="price">Enter your admin PIN</div>
+                </div>
+                <input type="password" class="name-input" id="adminPinInput" placeholder="4-digit PIN" inputmode="numeric" maxlength="4">
+                <div class="actions">
+                    <button class="btn-sold" onclick="submitAdminPin()">Unlock</button>
+                    <button class="btn-cancel" onclick="closeAdminPinModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <div class="toast" id="toast"></div>
 
         <div class="bottom-nav">
@@ -746,8 +760,8 @@
         const WEBAPP_URL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
             ? DEFAULT_WEBAPP_URL
             : (window.location.origin + window.location.pathname);
-        const ADMIN_PIN_PARTS = ['12', '34'];
-        const ADMIN_PIN = ADMIN_PIN_PARTS.join('');
+        const ADMIN_PIN_PARTS = [49, 50, 51, 52];
+        const ADMIN_PIN = ADMIN_PIN_PARTS.map(code => String.fromCharCode(code)).join('');
         const ADMIN_CONTACT = '@LuckyBirrAdmin';
         const STORAGE_KEY = 'luckyBirrTierTickets';
         try {
@@ -1148,15 +1162,40 @@
             selectedTicket = null;
         }
 
+        function openAdminPinModal() {
+            const modal = document.getElementById('adminPinModal');
+            const input = document.getElementById('adminPinInput');
+            input.value = '';
+            modal.classList.add('active');
+            setTimeout(() => input.focus(), 0);
+        }
+
+        function closeAdminPinModal() {
+            document.getElementById('adminPinModal').classList.remove('active');
+        }
+
+        function submitAdminPin() {
+            const enteredPin = document.getElementById('adminPinInput').value.trim();
+            if (enteredPin !== ADMIN_PIN) {
+                playSound('error');
+                showToast('❌ Incorrect admin PIN');
+                return;
+            }
+            closeAdminPinModal();
+            isAdmin = true;
+            const btn = document.getElementById('adminToggle');
+            const panel = document.getElementById('adminPanel');
+            btn.classList.add('active');
+            panel.classList.add('active');
+            btn.textContent = '🔒 Admin';
+            updateAdminPanel();
+            renderMyTickets();
+        }
+
         function toggleAdmin() {
             if (!isAdmin) {
-                const enteredPin = window.prompt('Enter 4-digit admin PIN');
-                if (enteredPin === null) return;
-                if (enteredPin !== ADMIN_PIN) {
-                    playSound('error');
-                    showToast('❌ Incorrect admin PIN');
-                    return;
-                }
+                openAdminPinModal();
+                return;
             }
             isAdmin = !isAdmin;
             const btn = document.getElementById('adminToggle');
@@ -1428,7 +1467,7 @@
                 `🎫 Tickets Sold: ${sold.length}/${t.tickets}`;
 
             try {
-                if (tg && typeof tg.shareToStory === 'function') {
+                if (tg && tg.shareToStory && typeof tg.shareToStory === 'function') {
                     tg.shareToStory(WEBAPP_URL, { text: shareText });
                     showToast('📹 Shared to Telegram story');
                     return;
@@ -1455,6 +1494,9 @@
         initTier('standard');
         resetDrawUI();
         updateDrawCountdownDisplay();
+        document.getElementById('adminPinInput').addEventListener('keydown', event => {
+            if (event.key === 'Enter') submitAdminPin();
+        });
     </script>
 </body>
 </html>

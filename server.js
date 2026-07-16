@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const pageLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
 });

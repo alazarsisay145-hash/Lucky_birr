@@ -760,7 +760,7 @@
         const DEFAULT_WEBAPP_URL = 'https://t.me/LuckyBirrBot';
         const WEBAPP_URL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
             ? DEFAULT_WEBAPP_URL
-            : (window.location.origin + window.location.pathname);
+            : window.location.href;
         const ADMIN_PIN_PARTS = [49, 50, 51, 52];
         const ADMIN_PIN = ADMIN_PIN_PARTS.map(code => String.fromCharCode(code)).join('');
         const ADMIN_CONTACT = '@LuckyBirrAdmin';
@@ -1123,6 +1123,7 @@
             if (!selectedTicket) return;
             const name = document.getElementById('buyerName').value.trim();
             const phone = document.getElementById('buyerPhone').value.trim();
+            const normalizedPhone = phone.replace(/\s+/g, '');
 
             if (!name) {
                 playSound('error');
@@ -1134,19 +1135,19 @@
                 showToast('❌ Please enter your phone number');
                 return;
             }
-            if (phone.length < 9) {
+            if (!/^(\+251|0)?9\d{8}$/.test(normalizedPhone)) {
                 playSound('error');
-                showToast('❌ Phone number too short');
+                showToast('❌ Use a valid Ethiopian mobile number');
                 return;
             }
 
-            const displayName = name + ' (' + phone + ')';
+            const displayName = name + ' (' + normalizedPhone + ')';
             tickets[selectedTicket - 1] = {
                 num: selectedTicket,
                 status: 'pending',
                 buyer: displayName,
                 playerName: name,
-                playerPhone: phone
+                playerPhone: normalizedPhone
             };
 
             saveTierTickets();
@@ -1469,7 +1470,7 @@
 
             try {
                 if (tg && tg.shareToStory && typeof tg.shareToStory === 'function') {
-                    tg.shareToStory(WEBAPP_URL, { text: shareText });
+                    await tg.shareToStory(WEBAPP_URL, { text: shareText });
                     showToast('📹 Shared to Telegram story');
                     return;
                 }

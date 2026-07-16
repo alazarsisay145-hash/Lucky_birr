@@ -4,6 +4,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const indexPath = path.join(__dirname, 'index.html');
 const pageLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -11,14 +12,16 @@ const pageLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(express.static(path.join(__dirname)));
+app.get(['/', '/index.html'], pageLimiter, (req, res) => {
+  res.sendFile(indexPath);
+});
 
 app.get('*', pageLimiter, (req, res) => {
   if (path.extname(req.path)) {
     res.status(404).end();
     return;
   }
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(indexPath);
 });
 
 app.listen(PORT, () => {

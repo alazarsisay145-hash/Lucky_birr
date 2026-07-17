@@ -1,40 +1,47 @@
 # Lucky Birr
 
-Lucky Birr is a Telegram Mini App style raffle interface with tiered tickets, payment proof upload flow, admin confirmation, and live draw simulation.
+Lucky Birr runs as an Express backend + static frontend, with persistent submissions in Supabase and Telegram admin notifications.
 
 ## Project Structure
 
-- `Index.html` – main application (all-in-one HTML/CSS/JS)
-- `server.js` – Node.js HTTP server that serves the app
-- `bot.js` – Telegram bot entry point
-- `package.json` – Node.js project manifest and scripts
-- `.env.example` – environment variable template
-- `Dockerfile` – container build definition
-- `.github/workflows/ci.yml` – CI/CD pipeline
-- `DEPLOYMENT.md` – full deployment and runbook guide
+- `server.js` – Express server, API routes, webhook route, static hosting
+- `public/index.html` – responsive submission form UI
+- `public/styles.css` – mobile-friendly styling
+- `public/script.js` – frontend submission logic
+- `supabase.sql` – schema for the `submissions` table
+- `.env.example` – required runtime variables for Render/local
 
 ## Quick Start
 
 ```bash
 npm install
-cp .env.example .env   # fill in BOT_TOKEN and WEBAPP_URL
-npm start              # http://localhost:3000
+cp .env.example .env
+npm start
 ```
 
-## Telegram Integration
+## Required Render Environment Variables
 
-The app detects Telegram WebApp automatically when loaded inside Telegram.
+```env
+NODE_ENV=production
+PORT=10000
+WEBSITE_URL=https://lucky-birr.onrender.com
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+ADMIN_CHAT_ID=7065387172
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_BUCKET=screenshots
+```
 
-Set your real app/bot URL in `Index.html`:
+## Supabase Setup
 
-- `const WEBAPP_URL = 'https://t.me/LuckyBirrBot';`
+1. Run SQL from `supabase.sql` in Supabase SQL editor.
+2. Create a **public** Storage bucket named `screenshots`.
 
-## Deployment
+## Telegram Webhook Command
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full instructions including Docker, Railway, Render, and VPS deployment.
-
-## Notes
-
-- File name is `Index.html` (capital I) in this repository.
-- Browser fallbacks are included for non-Telegram usage.
-- Telegram Mini Apps require HTTPS in production.
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://lucky-birr.onrender.com/webhook/<TELEGRAM_WEBHOOK_SECRET>"}'
+```

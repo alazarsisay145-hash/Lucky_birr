@@ -1,19 +1,19 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package.json ./
-RUN npm install --omit=dev
+# Copy package manifests and install production dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 # Copy application files
 COPY server.js ./
-COPY Index.html ./
-COPY bot.js ./
+COPY public/ ./public/
 
 # Expose the application port
-EXPOSE 3000
+EXPOSE 10000
 
 ENV NODE_ENV=production
+ENV PORT=10000
 
 CMD ["node", "server.js"]

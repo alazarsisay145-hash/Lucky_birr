@@ -25,12 +25,23 @@ const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   : null;
 
+if (!WEBSITE_URL) {
+  console.warn('WEBSITE_URL is not set. CORS will only allow requests without an Origin header.');
+}
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. /api/submit will not work.');
+}
+if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
+  console.warn('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
+}
+
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || !WEBSITE_URL) return callback(null, true);
+      if (!origin) return callback(null, true);
+      if (!WEBSITE_URL) return callback(null, false);
       if (origin === WEBSITE_URL) return callback(null, true);
       return callback(new Error('CORS not allowed'));
     }
@@ -196,6 +207,8 @@ process.on('SIGINT', () => {
 
 function mimeToExtension(mime) {
   if (mime === 'image/png') return 'png';
+  if (mime === 'image/jpeg') return 'jpeg';
+  if (mime === 'image/jpg') return 'jpg';
   if (mime === 'image/webp') return 'webp';
   return 'jpg';
 }

@@ -1,0 +1,15 @@
+{
+  "name": "lucky-birr",
+  "version": "1.0.0",
+  "description": "Lucky Birr – Telegram Mini App raffle with tiered tickets and live draw",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["telegram", "miniapp", "raffle"],
+  "license": "MIT"
+}

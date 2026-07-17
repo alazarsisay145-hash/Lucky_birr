@@ -17,8 +17,19 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  let urlPath = req.url === '/' ? '/Index.html' : req.url;
-  const filePath = path.join(__dirname, urlPath);
+  // Strip query string and decode URI, then normalise to prevent path traversal
+  let urlPath = req.url.split('?')[0];
+  try { urlPath = decodeURIComponent(urlPath); } catch (_) { urlPath = '/'; }
+
+  const filePath = path.normalize(path.join(__dirname, urlPath === '/' ? 'Index.html' : urlPath));
+
+  // Reject any path that escapes the project root
+  if (!filePath.startsWith(__dirname + path.sep) && filePath !== path.join(__dirname, 'Index.html')) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   const ext = path.extname(filePath);
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 

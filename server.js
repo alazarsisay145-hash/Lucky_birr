@@ -233,13 +233,24 @@ async function telegramRequest(method, payload) {
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error(`Telegram API ${method} failed with status ${response.status}`);
+  const rawBody = await response.text();
+  let data = null;
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody);
+    } catch (_error) {
+      data = null;
+    }
   }
 
-  const data = await response.json();
-  if (!data.ok) {
-    throw new Error(data.description || 'Telegram API error');
+  if (!response.ok) {
+    throw new Error(
+      `Telegram API ${method} failed with status ${response.status} ${response.statusText}. ${rawBody || ''}`.trim()
+    );
+  }
+
+  if (!data || !data.ok) {
+    throw new Error(data?.description || 'Telegram API error');
   }
 
   return data;

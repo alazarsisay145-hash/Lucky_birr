@@ -25,7 +25,15 @@ form.addEventListener('submit', async (event) => {
       body: payload
     });
 
-    const data = await response.json();
+    const raw = await response.text();
+    let data = {};
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (_error) {
+        data = {};
+      }
+    }
     if (!response.ok) {
       throw new Error(data.error || 'Submission failed');
     }

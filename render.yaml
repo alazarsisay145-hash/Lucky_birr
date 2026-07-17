@@ -2,6 +2,7 @@ services:
   - type: web
     name: lucky-birr
     runtime: node
+    nodeVersion: "20"
     buildCommand: npm install --production
     startCommand: npm start
     healthCheckPath: /healthz

@@ -10,7 +10,7 @@ This guide explains how to deploy Lucky Birr to [Render](https://render.com).
 |---|---|
 | Frontend | Static HTML/CSS/JS (`Index.html`) |
 | Server | Node.js (`server.js`) – serves static files and a `/healthz` health check |
-| Bot backend | `bot.js` – Telegram bot webhook (extend as needed) |
+| Bot backend | `bot.js` – placeholder for future Telegram bot webhook integration |
 
 ---
 
@@ -85,6 +85,9 @@ npm install
 # Copy and edit environment variables
 cp .env.example .env
 # Edit .env with your real values
+
+# Export variables to your shell (or use a tool like direnv)
+export $(grep -v '^#' .env | xargs)
 
 # Start the server
 npm start

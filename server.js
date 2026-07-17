@@ -20,6 +20,19 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
+// Resolve and validate a URL pathname against a safe root directory.
+// Returns null if the resolved path escapes the root (path traversal guard).
+function safeResolve(root, urlPathname) {
+  // Normalize away any `..` segments, then resolve against root
+  const normalized = path.normalize(urlPathname).replace(/^(\.\.(\/|\\|$))+/, '');
+  const resolved = path.join(root, normalized);
+  // Ensure the result is inside root
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    return null;
+  }
+  return resolved;
+}
+
 const server = http.createServer((req, res) => {
   // Health check endpoint for Render
   if (req.url === '/healthz' || req.url === '/health') {
@@ -28,9 +41,26 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Resolve the requested path; default to Index.html (SPA)
-  const urlPath = req.url === '/' ? '/Index.html' : req.url;
-  const filePath = path.join(__dirname, urlPath);
+  // Extract only the pathname (drops query string, hash, etc.)
+  let pathname;
+  try {
+    pathname = new URL(req.url, 'http://localhost').pathname;
+  } catch {
+    res.writeHead(400);
+    res.end('Bad Request');
+    return;
+  }
+
+  // Default to Index.html (SPA entry point)
+  const urlPath = pathname === '/' ? '/Index.html' : pathname;
+
+  const filePath = safeResolve(__dirname, urlPath);
+  if (!filePath) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
   const ext = path.extname(filePath).toLowerCase();
 
   fs.readFile(filePath, (err, data) => {

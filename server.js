@@ -34,6 +34,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
   console.warn('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
 }
+if (!TELEGRAM_WEBHOOK_SECRET) {
+  console.warn('TELEGRAM_WEBHOOK_SECRET is missing. Webhook endpoint is disabled.');
+}
 
 app.set('trust proxy', 1);
 app.use(helmet());
@@ -111,7 +114,9 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
     }
 
     if (!supabase) {
-      return res.status(500).json({ error: 'Supabase is not configured' });
+      return res.status(500).json({
+        error: 'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+      });
     }
 
     let screenshotUrl = null;
@@ -128,7 +133,12 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
           upsert: false
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.warn('Supabase storage upload failed:', uploadError.message);
+        return res.status(502).json({
+          error: `Failed to upload screenshot to bucket "${SUPABASE_BUCKET}". ${uploadError.message}`
+        });
+      }
 
       const { data: publicUrlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
       screenshotUrl = publicUrlData?.publicUrl || null;
@@ -142,13 +152,19 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
         phone,
         ticket_number: ticketNumber,
         amount: amountNumber,
+        status: 'pending',
         screenshot_url: screenshotUrl,
         screenshot_path: screenshotPath
       })
       .select()
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.warn('Supabase submission insert failed:', insertError.message);
+      return res.status(500).json({
+        error: `Failed to save submission for approval. ${insertError.message}`
+      });
+    }
 
     const details =
       '📥 New Lucky Birr Submission\n' +
@@ -161,6 +177,7 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
 
     return res.status(201).json({
       ok: true,
+      message: 'Submission received and waiting for approval.',
       notificationSent,
       submission
     });
@@ -214,7 +231,7 @@ function mimeToExtension(mime) {
 }
 
 async function notifyAdmin(details, screenshotUrl) {
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WEBHOOK_SECRET || !ADMIN_CHAT_ID) {
     return false;
   }
 
@@ -234,7 +251,7 @@ async function notifyAdmin(details, screenshotUrl) {
     });
     return true;
   } catch (error) {
-    console.error('Telegram notification failed:', error.message);
+    console.warn('Telegram notification failed:', error.message);
     return false;
   }
 }

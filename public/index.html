@@ -10,31 +10,42 @@
     <main class="container">
       <section class="card">
         <h1>Lucky Birr</h1>
-        <p class="subtitle">Submit your ticket details and payment screenshot.</p>
+        <p class="subtitle">Play first, then submit your payment for approval.</p>
 
-        <form id="submissionForm" enctype="multipart/form-data" novalidate>
-          <label for="fullName">Full Name</label>
-          <input id="fullName" name="fullName" type="text" required autocomplete="name" />
+        <section id="gameScreen" class="flow-step">
+          <h2>Ready to play?</h2>
+          <p class="subtitle">Start your Lucky Birr game, then submit your payment details to join.</p>
+          <button type="button" id="playNowButton">Play Now</button>
+        </section>
 
-          <label for="phone">Phone</label>
-          <input id="phone" name="phone" type="tel" required inputmode="tel" />
+        <section id="submissionScreen" class="flow-step hidden">
+          <h2>Submit Payment</h2>
+          <form id="submissionForm" enctype="multipart/form-data" novalidate>
+            <label for="fullName">Full Name</label>
+            <input id="fullName" name="fullName" type="text" required autocomplete="name" />
 
-          <label for="ticketNumber">Ticket Number</label>
-          <input id="ticketNumber" name="ticketNumber" type="text" required />
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" required inputmode="tel" />
 
-          <label for="amount">Amount (ETB)</label>
-          <input id="amount" name="amount" type="number" required min="1" step="0.01" />
+            <label for="ticketNumber">Ticket Number</label>
+            <input id="ticketNumber" name="ticketNumber" type="text" required />
 
-          <label for="screenshot">Payment Screenshot (optional)</label>
-          <input
-            id="screenshot"
-            name="screenshot"
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/webp"
-          />
+            <label for="amount">Amount (ETB)</label>
+            <input id="amount" name="amount" type="number" required min="1" step="0.01" />
 
-          <button type="submit" id="submitButton">Submit</button>
-        </form>
+            <label for="screenshot">Payment Screenshot (optional)</label>
+            <input
+              id="screenshot"
+              name="screenshot"
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+            />
+
+            <button type="submit" id="submitButton">Submit for Approval</button>
+          </form>
+
+          <button type="button" id="backToGameButton" class="secondary">Back to Game</button>
+        </section>
 
         <p id="status" class="status" role="status" aria-live="polite"></p>
       </section>

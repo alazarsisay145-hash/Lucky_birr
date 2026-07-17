@@ -48,6 +48,15 @@ h1 {
   font-size: 0.95rem;
 }
 
+h2 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.flow-step + .flow-step {
+  margin-top: 0.75rem;
+}
+
 form {
   display: grid;
   gap: 0.65rem;
@@ -88,6 +97,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .status {
   min-height: 1.2rem;
   margin: 0.8rem 0 0;
@@ -100,6 +114,10 @@ button:disabled {
 
 .status.err {
   color: var(--error);
+}
+
+.hidden {
+  display: none;
 }
 
 @media (max-width: 480px) {

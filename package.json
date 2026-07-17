@@ -1,0 +1,17 @@
+{
+  "name": "lucky-birr",
+  "version": "1.0.0",
+  "description": "Lucky Birr – Telegram Mini App raffle interface",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "lint": "echo \"No lint step configured\" && exit 0",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["telegram", "miniapp", "raffle", "lucky-birr"],
+  "license": "MIT"
+}

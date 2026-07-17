@@ -1,6 +1,22 @@
 const form = document.getElementById('submissionForm');
 const statusEl = document.getElementById('status');
 const submitButton = document.getElementById('submitButton');
+const playNowButton = document.getElementById('playNowButton');
+const backToGameButton = document.getElementById('backToGameButton');
+const gameScreen = document.getElementById('gameScreen');
+const submissionScreen = document.getElementById('submissionScreen');
+
+playNowButton.addEventListener('click', () => {
+  gameScreen.classList.add('hidden');
+  submissionScreen.classList.remove('hidden');
+  setStatus('', false);
+});
+
+backToGameButton.addEventListener('click', () => {
+  submissionScreen.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+  setStatus('', false);
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -39,7 +55,7 @@ form.addEventListener('submit', async (event) => {
     }
 
     form.reset();
-    setStatus('✅ Submission received successfully.', false);
+    setStatus('✅ Submission received. Waiting for approval.', false);
   } catch (error) {
     setStatus(`❌ ${error.message}`, true);
   } finally {

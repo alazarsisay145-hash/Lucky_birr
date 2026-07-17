@@ -6,6 +6,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
+const INDEX_FILE = 'Index.html';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -23,11 +24,8 @@ const MIME_TYPES = {
 // Resolve and validate a URL pathname against a safe root directory.
 // Returns null if the resolved path escapes the root (path traversal guard).
 function safeResolve(root, urlPathname) {
-  // Normalize away any `..` segments, then resolve against root
-  const normalized = path.normalize(urlPathname).replace(/^(\.\.(\/|\\|$))+/, '');
-  const resolved = path.join(root, normalized);
-  // Ensure the result is inside root
-  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+  const resolved = path.join(root, path.normalize(urlPathname));
+  if (!resolved.startsWith(root + path.sep)) {
     return null;
   }
   return resolved;
@@ -51,8 +49,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Default to Index.html (SPA entry point)
-  const urlPath = pathname === '/' ? '/Index.html' : pathname;
+  // Default to INDEX_FILE (SPA entry point)
+  const urlPath = pathname === '/' ? `/${INDEX_FILE}` : pathname;
 
   const filePath = safeResolve(__dirname, urlPath);
   if (!filePath) {
@@ -65,8 +63,8 @@ const server = http.createServer((req, res) => {
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      // Fall back to Index.html for SPA routing
-      fs.readFile(path.join(__dirname, 'Index.html'), (err2, htmlData) => {
+      // Fall back to INDEX_FILE for SPA routing
+      fs.readFile(path.join(__dirname, INDEX_FILE), (err2, htmlData) => {
         if (err2) {
           res.writeHead(500);
           res.end('Server error');

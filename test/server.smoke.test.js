@@ -40,3 +40,39 @@ test('server serves the game shell', async () => {
     assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${stderr}`);
   }
 });
+
+test('server CSP allows the game shell resources to render', async () => {
+  const port = 3102;
+  const server = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NODE_ENV: 'test'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  let stderr = '';
+  server.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    const csp = response.headers.get('content-security-policy') || '';
+
+    assert.match(csp, /script-src[^;]*'unsafe-inline'/i);
+    assert.match(csp, /script-src[^;]*https:\/\/telegram\.org/i);
+    assert.match(csp, /style-src[^;]*'unsafe-inline'/i);
+    assert.match(csp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/i);
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+    assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${stderr}`);
+  }
+});

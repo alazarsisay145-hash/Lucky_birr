@@ -24,7 +24,7 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { height: 100%; overflow: hidden; overflow-x: hidden; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             background: var(--bg); 
@@ -471,6 +471,19 @@
         }
         .empty-state .icon { font-size: 32px; margin-bottom: 8px; }
 
+        :focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
         #fileInput { display: none; }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -565,13 +578,13 @@
 
                 <div class="screenshot-section">
                     <div class="section-title"><div class="dot"></div> Send Payment Proof</div>
-                    <div class="screenshot-upload" id="screenshotUpload" onclick="document.getElementById('fileInput').click()">
+                    <div class="screenshot-upload" id="screenshotUpload" role="button" tabindex="0" aria-label="Upload payment screenshot" onclick="document.getElementById('fileInput').click()">
                         <div class="icon" id="uploadIcon">📤</div>
                         <div class="text" id="uploadText">Tap to upload payment screenshot</div>
                         <div class="sub">Telebirr, Dashen, or CBE receipt</div>
                     </div>
                     <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
-                    <input type="number" class="amount-input" id="paymentAmount" placeholder="Amount paid (ETB)" min="10">
+                    <input type="number" class="amount-input" id="paymentAmount" placeholder="Amount paid (ETB)" min="10" aria-label="Amount paid in Ethiopian Birr">
                     <button class="send-btn" id="sendBtn" onclick="sendScreenshot()" disabled>
                         📨 Send to Admin
                     </button>
@@ -782,6 +795,9 @@
         let selectedTicket = null;
         let drawInProgress = false;
         let screenshotFile = null;
+        let drawRollInterval = null;
+        let drawTimeouts = [];
+        const WEBAPP_URL = window.location.href.split('#')[0];
 
         function getCurrentPlayerName() {
             const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
@@ -797,7 +813,39 @@
             return user ? user.id.toString() : 'local_player';
         }
 
+        function queueDrawTimeout(callback, delay) {
+            const id = setTimeout(() => {
+                drawTimeouts = drawTimeouts.filter(timeoutId => timeoutId !== id);
+                callback();
+            }, delay);
+            drawTimeouts.push(id);
+            return id;
+        }
+
+        function clearDrawTimers() {
+            drawTimeouts.forEach(clearTimeout);
+            drawTimeouts = [];
+            if (drawRollInterval) {
+                clearInterval(drawRollInterval);
+                drawRollInterval = null;
+            }
+        }
+
+        function resetDrawUiState() {
+            const ball = document.getElementById('drawBall');
+            ball.classList.remove('rolling');
+            ball.textContent = '?';
+            ball.style.background = '';
+            document.getElementById('drawBtn').style.display = 'block';
+            document.getElementById('drawCountdown').style.display = 'block';
+            document.getElementById('ballContainer').style.display = 'none';
+            document.getElementById('drawStatus').textContent = 'Ready!';
+        }
+
         function initTier(tierKey) {
+            clearDrawTimers();
+            drawInProgress = false;
+            resetDrawUiState();
             currentTier = tierKey;
             const t = TIERS[tierKey];
             tickets = [];
@@ -841,7 +889,17 @@
             tickets.forEach(t => {
                 const div = document.createElement('div');
                 div.className = `ticket ${t.status}`;
+                div.setAttribute('role', 'button');
+                div.setAttribute('tabindex', '0');
+                div.setAttribute('aria-label', `Ticket ${String(t.num).padStart(2,'0')} ${t.status}`);
                 div.onclick = () => { playSound('tap'); openTicket(t.num); };
+                div.onkeydown = (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        playSound('tap');
+                        openTicket(t.num);
+                    }
+                };
                 let icon = t.status === 'sold' ? '✅' : t.status === 'pending' ? '⏳' : '';
                 div.innerHTML = `
                     <div class="num">#${String(t.num).padStart(2,'0')}</div>
@@ -924,6 +982,23 @@
             document.getElementById('adminProfit').textContent = (sold * t.price - (sold >= 3 ? totalPrizes : 0)).toLocaleString();
         }
 
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+            const copied = document.execCommand('copy');
+            document.body.removeChild(helper);
+            return copied;
+        }
+
         function exportData() {
             const t = TIERS[currentTier];
             const sold = tickets.filter(x => x.status === 'sold');
@@ -942,9 +1017,9 @@
 `;
             pending.forEach(x => data += `  #${String(x.num).padStart(2,'0')} - ${x.buyer}
 `);
-            navigator.clipboard.writeText(data).then(() => {
-                showToast('📊 Data copied to clipboard!');
-            });
+            copyToClipboard(data)
+                .then(() => showToast('📊 Data copied to clipboard!'))
+                .catch(() => showToast('❌ Could not copy data.'));
         }
 
         function openTicket(num) {
@@ -1087,11 +1162,13 @@
         }
 
         function copyText(text, el) {
-            navigator.clipboard.writeText(text).then(() => {
-                el.textContent = '✓';
-                el.classList.add('copied');
-                setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('copied'); }, 1500);
-            }).catch(() => showToast('Copied: ' + text));
+            copyToClipboard(text)
+                .then(() => {
+                    el.textContent = '✓';
+                    el.classList.add('copied');
+                    setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('copied'); }, 1500);
+                })
+                .catch(() => showToast('Copied: ' + text));
         }
 
         function handleFileSelect(event) {
@@ -1111,6 +1188,17 @@
         }
 
         document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
+        document.getElementById('screenshotUpload').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                document.getElementById('fileInput').click();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
 
         function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
@@ -1164,6 +1252,7 @@
             const sold = tickets.filter(t => t.status === 'sold');
             if (sold.length < 3) { playSound('error'); showToast('Need at least 3 sold tickets!'); return; }
 
+            clearDrawTimers();
             drawInProgress = true;
             document.getElementById('drawBtn').style.display = 'none';
             document.getElementById('drawCountdown').style.display = 'none';
@@ -1177,17 +1266,20 @@
             const prizes = [t.prizes.first, t.prizes.second, t.prizes.third];
             const colors = ['linear-gradient(135deg, #f59e0b, #fbbf24)', 'linear-gradient(135deg, #94a3b8, #cbd5e1)', 'linear-gradient(135deg, #b45309, #d97706)'];
 
-            const roll = setInterval(() => {
+            drawRollInterval = setInterval(() => {
                 playSound('roll');
                 const r = sold[Math.floor(Math.random() * sold.length)];
                 ball.textContent = '#' + String(r.num).padStart(2,'0');
             }, 80);
 
             [0, 1, 2].forEach(i => {
-                setTimeout(() => {
+                queueDrawTimeout(() => {
+                    if (!drawInProgress) return;
                     document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
-                    setTimeout(() => {
-                        clearInterval(roll);
+                    queueDrawTimeout(() => {
+                        if (!drawInProgress) return;
+                        clearInterval(drawRollInterval);
+                        drawRollInterval = null;
                         ball.classList.remove('rolling');
                         ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
                         ball.style.background = colors[i];
@@ -1196,17 +1288,26 @@
                         playSound('win');
 
                         if (i < 2) {
-                            setTimeout(() => {
+                            queueDrawTimeout(() => {
+                                if (!drawInProgress) return;
                                 ball.classList.add('rolling');
-                                const nr = setInterval(() => {
+                                drawRollInterval = setInterval(() => {
                                     playSound('roll');
                                     const r = sold[Math.floor(Math.random() * sold.length)];
                                     ball.textContent = '#' + String(r.num).padStart(2,'0');
                                 }, 80);
-                                setTimeout(() => clearInterval(nr), 1200);
+                                queueDrawTimeout(() => {
+                                    if (!drawRollInterval) return;
+                                    clearInterval(drawRollInterval);
+                                    drawRollInterval = null;
+                                }, 1200);
                             }, 800);
                         } else {
-                            setTimeout(() => { createConfetti(); showWinners(winners, prizes); }, 1200);
+                            queueDrawTimeout(() => {
+                                if (!drawInProgress) return;
+                                createConfetti();
+                                showWinners(winners, prizes);
+                            }, 1200);
                         }
                     }, 1200);
                 }, i === 0 ? 2000 : i === 1 ? 4500 : 7000);
@@ -1244,16 +1345,15 @@
             document.getElementById('winSold').textContent = sold + ' / ' + t.tickets;
 
             drawInProgress = false;
-            document.getElementById('drawBtn').style.display = 'block';
-            document.getElementById('drawCountdown').style.display = 'block';
-            document.getElementById('ballContainer').style.display = 'none';
-            document.getElementById('drawBall').textContent = '?';
-            document.getElementById('drawBall').style.background = '';
-            document.getElementById('drawStatus').textContent = 'Ready!';
+            clearDrawTimers();
+            resetDrawUiState();
         }
 
         function resetDraw() {
             playSound('tap');
+            drawInProgress = false;
+            clearDrawTimers();
+            resetDrawUiState();
             const t = TIERS[currentTier];
             tickets = [];
             for (let i = 1; i <= t.tickets; i++) tickets.push({ num: i, status: 'empty', buyer: '' });
@@ -1287,7 +1387,7 @@
         `🥉 *3rd Winner:* ${w3}\n` +
         `    Prize: ${t.prizes.third} ETB\n\n` +
         `💰 Total Pool: ${sold.length * t.price} ETB\n` +
-        `🎫 Tickets Sold: ${sold.length}/20\n\n` +
+        `🎫 Tickets Sold: ${sold.length}/${t.tickets}\n\n` +
         `🎲 Fair & Transparent\n` +
         `🇪🇹 Made for Ethiopia\n\n` +
         `👇 Play now:`;
@@ -1301,9 +1401,9 @@
     } else if (tg && tg.openTelegramLink) {
         tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL || 'https://t.me/LuckyBirrBot') + '&text=' + encodeURIComponent(shareText));
     } else {
-        navigator.clipboard.writeText(shareText).then(() => {
-            showToast('📋 Results copied! Paste in your group.');
-        });
+        copyToClipboard(shareText)
+            .then(() => showToast('📋 Results copied! Paste in your group.'))
+            .catch(() => showToast('❌ Could not copy results.'));
     }
 }
 

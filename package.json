@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "lint": "echo \"No lint step configured\" && exit 0",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "node --test"
   },
   "engines": {
     "node": "22.x"

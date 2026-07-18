@@ -186,13 +186,14 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
   }
 });
 
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'Index.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/webhook/')) {
     return next();
   }
-  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  return res.sendFile(path.join(__dirname, 'Index.html'));
 });
 
 app.use((err, _req, res, _next) => {

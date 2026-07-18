@@ -33,7 +33,10 @@ test('server serves the game shell', async () => {
     assert.match(body, /Tap to Buy/i);
   } finally {
     server.kill('SIGTERM');
-    await wait(300);
-    assert.equal(server.killed, true, `Server did not terminate cleanly. Stderr: ${stderr}`);
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+    assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${stderr}`);
   }
 });

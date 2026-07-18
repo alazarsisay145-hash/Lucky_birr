@@ -24,7 +24,7 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100%; overflow: hidden; overflow-x: hidden; }
+        html, body { height: 100%; overflow: hidden; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             background: var(--bg); 
@@ -822,6 +822,11 @@
             return id;
         }
 
+        function runIfDrawActive(callback) {
+            if (!drawInProgress) return;
+            callback();
+        }
+
         function clearDrawTimers() {
             drawTimeouts.forEach(clearTimeout);
             drawTimeouts = [];
@@ -891,7 +896,8 @@
                 div.className = `ticket ${t.status}`;
                 div.setAttribute('role', 'button');
                 div.setAttribute('tabindex', '0');
-                div.setAttribute('aria-label', `Ticket ${String(t.num).padStart(2,'0')} ${t.status}`);
+                const statusLabel = t.status === 'sold' ? 'confirmed' : t.status === 'pending' ? 'reserved' : 'available';
+                div.setAttribute('aria-label', `Ticket ${String(t.num).padStart(2,'0')} ${statusLabel}`);
                 div.onclick = () => { playSound('tap'); openTicket(t.num); };
                 div.onkeydown = (event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -994,7 +1000,7 @@
             document.body.appendChild(helper);
             helper.focus();
             helper.select();
-            const copied = document.execCommand('copy');
+            const copied = document.execCommand('copy'); // Legacy fallback for older browsers.
             document.body.removeChild(helper);
             return copied;
         }
@@ -1274,41 +1280,45 @@
 
             [0, 1, 2].forEach(i => {
                 queueDrawTimeout(() => {
-                    if (!drawInProgress) return;
-                    document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
+                    runIfDrawActive(() => {
+                        document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
+                    });
                     queueDrawTimeout(() => {
-                        if (!drawInProgress) return;
-                        clearInterval(drawRollInterval);
-                        drawRollInterval = null;
-                        ball.classList.remove('rolling');
-                        ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
-                        ball.style.background = colors[i];
-                        ball.style.animation = 'none'; ball.offsetHeight;
-                        ball.style.animation = 'ball-pulse 0.5s ease-in-out 3';
-                        playSound('win');
+                        runIfDrawActive(() => {
+                            clearInterval(drawRollInterval);
+                            drawRollInterval = null;
+                            ball.classList.remove('rolling');
+                            ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
+                            ball.style.background = colors[i];
+                            ball.style.animation = 'none'; ball.offsetHeight;
+                            ball.style.animation = 'ball-pulse 0.5s ease-in-out 3';
+                            playSound('win');
 
-                        if (i < 2) {
-                            queueDrawTimeout(() => {
-                                if (!drawInProgress) return;
-                                ball.classList.add('rolling');
-                                drawRollInterval = setInterval(() => {
-                                    playSound('roll');
-                                    const r = sold[Math.floor(Math.random() * sold.length)];
-                                    ball.textContent = '#' + String(r.num).padStart(2,'0');
-                                }, 80);
+                            if (i < 2) {
                                 queueDrawTimeout(() => {
-                                    if (!drawRollInterval) return;
-                                    clearInterval(drawRollInterval);
-                                    drawRollInterval = null;
+                                    runIfDrawActive(() => {
+                                        ball.classList.add('rolling');
+                                        drawRollInterval = setInterval(() => {
+                                            playSound('roll');
+                                            const r = sold[Math.floor(Math.random() * sold.length)];
+                                            ball.textContent = '#' + String(r.num).padStart(2,'0');
+                                        }, 80);
+                                        queueDrawTimeout(() => {
+                                            if (!drawRollInterval) return;
+                                            clearInterval(drawRollInterval);
+                                            drawRollInterval = null;
+                                        }, 1200);
+                                    });
+                                }, 800);
+                            } else {
+                                queueDrawTimeout(() => {
+                                    runIfDrawActive(() => {
+                                        createConfetti();
+                                        showWinners(winners, prizes);
+                                    });
                                 }, 1200);
-                            }, 800);
-                        } else {
-                            queueDrawTimeout(() => {
-                                if (!drawInProgress) return;
-                                createConfetti();
-                                showWinners(winners, prizes);
-                            }, 1200);
-                        }
+                            }
+                        });
                     }, 1200);
                 }, i === 0 ? 2000 : i === 1 ? 4500 : 7000);
             });

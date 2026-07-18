@@ -16,6 +16,10 @@
             --accent: #f59e0b;
             --accent2: #10b981;
             --accent3: #ef4444;
+            --pending-border: var(--accent);
+            --pending-text: #fde68a;
+            --sold-border: var(--accent2);
+            --sold-text: #d1fae5;
             --text: #f1f5f9;
             --text2: #94a3b8;
             --border: #1e293b;
@@ -29,8 +33,6 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             background: var(--bg); 
             color: var(--text); 
-            min-height: 100vh;
-            min-height: 100dvh;
             overflow-y: auto;
             padding-top: var(--tg-safe-top);
             padding-bottom: var(--tg-safe-bottom);
@@ -206,10 +208,10 @@
         .ticket:active { transform: scale(0.95); }
         .ticket:hover { border-color: var(--accent); }
         .ticket.sold {
-            background: rgba(16,185,129,0.16); border-color: #34d399;
+            background: rgba(16,185,129,0.16); border-color: var(--sold-border);
         }
         .ticket.pending {
-            background: rgba(245,158,11,0.16); border-color: #fbbf24;
+            background: rgba(245,158,11,0.16); border-color: var(--pending-border);
             animation: pulse-border 2s infinite;
         }
         @keyframes pulse-border {
@@ -222,8 +224,8 @@
             max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .ticket .status-icon { font-size: 9px; margin-top: 1px; }
-        .ticket.pending .num, .ticket.pending .buyer { color: #fde68a; }
-        .ticket.sold .num, .ticket.sold .buyer { color: #d1fae5; }
+        .ticket.pending .num, .ticket.pending .buyer { color: var(--pending-text); }
+        .ticket.sold .num, .ticket.sold .buyer { color: var(--sold-text); }
         .ticket.sold .status-icon { color: var(--accent2); }
         .ticket.pending .status-icon { color: var(--accent); }
 

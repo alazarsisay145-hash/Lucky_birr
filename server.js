@@ -12,6 +12,20 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 10000;
+const contentSecurityPolicy = {
+  directives: {
+    defaultSrc: ["'self'"],
+    baseUri: ["'self'"],
+    connectSrc: ["'self'", 'https://api.telegram.org', 'https://telegram.org'],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+    formAction: ["'self'"],
+    frameAncestors: ["'self'", 'https://t.me', 'https://telegram.org', 'https://*.telegram.org'],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+    mediaSrc: ["'self'", 'blob:', 'data:'],
+    scriptSrc: ["'self'", "'unsafe-inline'", 'https://telegram.org'],
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com']
+  }
+};
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
@@ -39,7 +53,11 @@ if (!TELEGRAM_WEBHOOK_SECRET) {
 }
 
 app.set('trust proxy', 1);
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy
+  })
+);
 app.use(
   cors({
     origin(origin, callback) {

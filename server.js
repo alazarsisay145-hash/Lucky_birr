@@ -1,8 +1,10 @@
 require('dotenv').config();
 
+const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
+const jwt = require('jsonwebtoken');
 const morgan = require('morgan');
 const multer = require('multer');
 const path = require('path');
@@ -34,6 +36,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'screenshots';
 const WEBSITE_URL = process.env.WEBSITE_URL || '';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -43,13 +50,16 @@ if (!WEBSITE_URL) {
   console.warn('WEBSITE_URL is not set. CORS will only allow requests without an Origin header.');
 }
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. /api/submit will not work.');
+  console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. Database features will not work.');
 }
 if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
   console.warn('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
 }
 if (!TELEGRAM_WEBHOOK_SECRET) {
   console.warn('TELEGRAM_WEBHOOK_SECRET is missing. Webhook endpoint is disabled.');
+}
+if (!JWT_SECRET) {
+  console.warn('JWT_SECRET is missing. Authentication will not work.');
 }
 
 app.set('trust proxy', 1);
@@ -79,6 +89,39 @@ app.use(
     legacyHeaders: false
   })
 );
+
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+function verifyJWT(req, res, next) {
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = auth.slice(7);
+  if (!JWT_SECRET) {
+    return res.status(500).json({ error: 'JWT not configured on server' });
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    return next();
+  } catch (_err) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || !ADMIN_EMAILS.includes((req.user.email || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  return next();
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -198,6 +241,387 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
       message: 'Submission received and waiting for approval.',
       notificationSent,
       submission
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ===== AUTH ROUTES =====
+
+app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
+  try {
+    const { email, phone, password, fullName } = req.body;
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({
+        error: 'Password must contain uppercase, lowercase, and a number'
+      });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (existing) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const { data: user, error: insertError } = await supabase
+      .from('users')
+      .insert({
+        email: email.toLowerCase(),
+        phone: phone || null,
+        password_hash: passwordHash,
+        full_name: fullName || null,
+        balance: 0
+      })
+      .select('id, email, phone, full_name, balance')
+      .single();
+
+    if (insertError) {
+      return res.status(500).json({ error: 'Failed to create user' });
+    }
+
+    if (!JWT_SECRET) {
+      return res.status(500).json({ error: 'JWT not configured on server' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
+
+    return res.status(201).json({
+      ok: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        fullName: user.full_name,
+        balance: user.balance,
+        isAdmin
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/auth/login', authRateLimit, async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, phone, full_name, balance, password_hash')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (error || !user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!JWT_SECRET) {
+      return res.status(500).json({ error: 'JWT not configured on server' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
+
+    return res.json({
+      ok: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        fullName: user.full_name,
+        balance: user.balance,
+        isAdmin
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/auth/me', verifyJWT, async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, phone, full_name, balance')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (error || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
+
+    return res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        fullName: user.full_name,
+        balance: user.balance,
+        isAdmin
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/auth/logout', verifyJWT, (_req, res) => {
+  return res.json({ ok: true, message: 'Logged out' });
+});
+
+// ===== SUBMISSIONS (JWT-protected) =====
+
+app.post('/api/submissions', verifyJWT, upload.single('screenshot'), async (req, res, next) => {
+  try {
+    const { ticketNumber, tier, amount, paymentMethod } = req.body;
+
+    const amountNumber = Number(amount);
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+      return res.status(400).json({ error: 'Amount must be a valid positive number' });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    let screenshotUrl = null;
+    let screenshotPath = null;
+
+    if (req.file) {
+      const ext = mimeToExtension(req.file.mimetype);
+      const filePath = `uploads/${Date.now()}-${randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(filePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) {
+        return res.status(502).json({
+          error: `Screenshot upload failed: ${uploadError.message}`
+        });
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
+      screenshotUrl = publicUrlData?.publicUrl || null;
+      screenshotPath = filePath;
+    }
+
+    const { data: userRecord } = await supabase
+      .from('users')
+      .select('full_name, email, phone')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    const { data: submission, error: insertError } = await supabase
+      .from('submissions')
+      .insert({
+        user_id: req.user.id,
+        ticket_number: ticketNumber ? Number(ticketNumber) : null,
+        tier: tier || null,
+        amount: amountNumber,
+        payment_method: paymentMethod || 'telebirr',
+        screenshot_url: screenshotUrl,
+        screenshot_path: screenshotPath,
+        status: 'pending'
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      return res.status(500).json({ error: `Failed to save submission: ${insertError.message}` });
+    }
+
+    const userName = userRecord?.full_name || userRecord?.email || 'Unknown';
+    const userPhone = userRecord?.phone || 'N/A';
+
+    const details =
+      '📥 New Lucky Birr Submission\n' +
+      `👤 User: ${userName}\n` +
+      `📧 Email: ${userRecord?.email || 'N/A'}\n` +
+      `📞 Phone: ${userPhone}\n` +
+      `🎫 Tier: ${tier || 'N/A'}\n` +
+      `🎟 Ticket: ${ticketNumber || 'N/A'}\n` +
+      `💵 Amount: ${amountNumber} ETB\n` +
+      `💳 Payment: ${paymentMethod || 'N/A'}`;
+
+    const notificationSent = await notifyAdmin(details, screenshotUrl);
+
+    return res.status(201).json({
+      ok: true,
+      submissionId: submission.id,
+      message: 'Submission received',
+      notificationSent
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ===== ADMIN ROUTES =====
+
+app.get('/api/admin/submissions', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    const { data: submissions, error, count } = await supabase
+      .from('submissions')
+      .select('*, users(email, full_name, phone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.json({ ok: true, submissions: submissions || [], total: count || 0, page });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/admin/submissions/:id/approve', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { id } = req.params;
+
+    const { data: submission, error: fetchError } = await supabase
+      .from('submissions')
+      .select('*, users(email, full_name)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError || !submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    if (submission.status !== 'pending') {
+      return res.status(400).json({ error: 'Submission already processed' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('submissions')
+      .update({ status: 'approved', updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    const userName = submission.users?.full_name || submission.users?.email || 'Unknown';
+    const details =
+      `✅ Submission #${id} APPROVED\n` +
+      `👤 User: ${userName}\n` +
+      `💵 Amount: ${submission.amount} ETB`;
+    await notifyAdmin(details, null);
+
+    return res.json({ ok: true, message: 'Submission approved' });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/admin/submissions/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const { error: updateError } = await supabase
+      .from('submissions')
+      .update({ status: 'rejected', admin_notes: reason || null, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    return res.json({ ok: true, message: 'Submission rejected' });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/admin/stats', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database not configured' });
+    }
+
+    const { data: stats, error } = await supabase
+      .from('submissions')
+      .select('status, amount');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    const approved = stats?.filter((s) => s.status === 'approved') || [];
+    const pending = stats?.filter((s) => s.status === 'pending') || [];
+    const totalPool = approved.reduce((acc, s) => acc + Number(s.amount), 0);
+
+    return res.json({
+      ok: true,
+      sold: approved.length,
+      pending: pending.length,
+      totalPool,
+      totalProfit: Math.round(totalPool * 0.25 * 100) / 100,
+      submissions: stats?.length || 0
     });
   } catch (error) {
     return next(error);

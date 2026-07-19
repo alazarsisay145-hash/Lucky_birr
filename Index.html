@@ -1012,6 +1012,10 @@
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
         }
 
+        function getStoredAuthToken() {
+            return AUTH_TOKEN || localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+        }
+
         function getAuthErrorMessage(resp, data, fallback) {
             if (data && typeof data.error === 'string' && data.error.trim()) {
                 return data.error;
@@ -1616,10 +1620,7 @@
         async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
             const tier = TIERS[currentTier];
-            const token = AUTH_TOKEN || localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-            if (token && !AUTH_TOKEN) {
-                AUTH_TOKEN = token;
-            }
+            const token = getStoredAuthToken();
             if (!screenshotFile || !amount) {
                 playSound('error');
                 showToast('Please upload screenshot and enter amount');

@@ -29,7 +29,7 @@ async function stopServer(server, getStderr) {
 }
 
 function readGameShell() {
-  return fs.readFileSync(path.join(process.cwd(), 'Index.html'), 'utf8');
+  return fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
 }
 
 test('server serves the game shell', async () => {
@@ -190,7 +190,8 @@ test('game shell auth flow initializes persisted auth and protects submissions',
   assert.match(html, /fetch\('\/api\/auth\/login'/);
   assert.match(html, /fetch\('\/api\/auth\/register'/);
   assert.match(html, /fetch\('\/api\/auth\/me'/);
-  assert.match(html, /const token = AUTH_TOKEN \|\| localStorage\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /function getStoredAuthToken\(\)/);
+  assert.match(html, /const token = getStoredAuthToken\(\)/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ token \}/);
   assert.match(html, /initAuthState\(\);/);
 });

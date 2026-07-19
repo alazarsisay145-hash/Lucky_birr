@@ -657,7 +657,7 @@
             </div>
         </div>
     </div>
-    <div class="app">
+    <div class="app" id="app">
         <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()" style="display:none;">👤 Admin</button>
 
         <div class="header">
@@ -973,6 +973,9 @@
         const WEBAPP_URL = window.location.href.split('#')[0];
 
         // ===== AUTH STATE =====
+        const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
+        const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token';
+        const AUTH_LOADING_OPACITY = '0.55';
         let AUTH_TOKEN = null;
         let currentUser = null;
 
@@ -990,6 +993,75 @@
             const el = document.getElementById(id);
             el.textContent = msg;
             el.classList.toggle('show', !!msg);
+        }
+
+        function setAuthButtonState(btn, isLoading, idleText, loadingText) {
+            btn.disabled = isLoading;
+            btn.textContent = isLoading ? loadingText : idleText;
+            btn.style.opacity = isLoading ? AUTH_LOADING_OPACITY : '';
+            if (isLoading) {
+                btn.setAttribute('aria-busy', 'true');
+            } else {
+                btn.removeAttribute('aria-busy');
+            }
+        }
+
+        function saveAuthSession(token, user) {
+            AUTH_TOKEN = token;
+            currentUser = user;
+            localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+        }
+
+        function clearAuthSession() {
+            AUTH_TOKEN = null;
+            currentUser = null;
+            localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+        }
+
+        function getPersistedAuthToken() {
+            const stored = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            if (stored) {
+                return stored;
+            }
+            const legacy = localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            if (legacy) {
+                localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacy);
+                localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+                return legacy;
+            }
+            return null;
+        }
+
+        function getAuthErrorMessage(resp, data, fallback) {
+            if (data && typeof data.error === 'string' && data.error.trim()) {
+                return data.error;
+            }
+            if (resp.status === 400) return fallback;
+            if (resp.status === 401) return 'Invalid email or password';
+            return 'Something went wrong. Please try again.';
+        }
+
+        async function readJsonResponse(resp, context) {
+            try {
+                return await resp.json();
+            } catch (error) {
+                console.error(context + ' returned invalid JSON:', error);
+                return null;
+            }
+        }
+
+        function showAuthOverlay() {
+            document.getElementById('authOverlay').classList.remove('hidden');
+            showLoginScreen();
+            checkSendReady();
+        }
+
+        function bindAuthErrorClear(inputIds, errorId) {
+            inputIds.forEach((id) => {
+                document.getElementById(id).addEventListener('input', () => setAuthError(errorId, ''));
+            });
         }
 
         function updatePwStrength() {
@@ -1018,28 +1090,26 @@
                 return;
             }
             const btn = document.getElementById('loginBtn');
-            btn.disabled = true;
-            btn.textContent = '⏳ Signing in...';
+            setAuthButtonState(btn, true, 'Sign In', '⏳ Signing in...');
             try {
                 const resp = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
-                const data = await resp.json();
-                if (data.ok) {
-                    AUTH_TOKEN = data.token;
-                    currentUser = data.user;
-                    localStorage.setItem('lb_token', data.token);
+                const data = await readJsonResponse(resp, 'Login response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
+                    saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    setAuthError('loginError', data.error || 'Login failed');
+                    console.error('Login failed:', resp.status, data);
+                    setAuthError('loginError', getAuthErrorMessage(resp, data, 'Please enter your email and password'));
                 }
-            } catch (_e) {
+            } catch (error) {
+                console.error('Login request failed:', error);
                 setAuthError('loginError', 'Network error. Please try again.');
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Sign In';
+                setAuthButtonState(btn, false, 'Sign In', '⏳ Signing in...');
             }
         }
 
@@ -1065,28 +1135,26 @@
             }
 
             const btn = document.getElementById('registerBtn');
-            btn.disabled = true;
-            btn.textContent = '⏳ Creating account...';
+            setAuthButtonState(btn, true, 'Create Account', '⏳ Creating account...');
             try {
                 const resp = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, phone, password, fullName })
                 });
-                const data = await resp.json();
-                if (data.ok) {
-                    AUTH_TOKEN = data.token;
-                    currentUser = data.user;
-                    localStorage.setItem('lb_token', data.token);
+                const data = await readJsonResponse(resp, 'Register response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
+                    saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    setAuthError('registerError', data.error || 'Registration failed');
+                    console.error('Registration failed:', resp.status, data);
+                    setAuthError('registerError', getAuthErrorMessage(resp, data, 'Please review your registration details'));
                 }
-            } catch (_e) {
+            } catch (error) {
+                console.error('Registration request failed:', error);
                 setAuthError('registerError', 'Network error. Please try again.');
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Create Account';
+                setAuthButtonState(btn, false, 'Create Account', '⏳ Creating account...');
             }
         }
 
@@ -1125,9 +1193,7 @@
                     });
                 } catch (_e) { /* silent */ }
             }
-            AUTH_TOKEN = null;
-            currentUser = null;
-            localStorage.removeItem('lb_token');
+            clearAuthSession();
             isAdmin = false;
             document.getElementById('userInfoBar').classList.remove('show');
             document.getElementById('adminPanel').classList.remove('active');
@@ -1135,33 +1201,32 @@
             document.getElementById('adminToggle').textContent = '👤 Admin';
             updateAdminToggleVisibility();
             checkSendReady();
-            document.getElementById('authOverlay').classList.remove('hidden');
-            showLoginScreen();
+            showAuthOverlay();
         }
 
-        async function initAuth() {
-            const stored = localStorage.getItem('lb_token');
+        async function initAuthState() {
+            const stored = getPersistedAuthToken();
             if (!stored) {
-                document.getElementById('authOverlay').classList.remove('hidden');
+                showAuthOverlay();
                 return;
             }
             try {
                 const resp = await fetch('/api/auth/me', {
                     headers: { 'Authorization': 'Bearer ' + stored }
                 });
-                const data = await resp.json();
-                if (data.ok) {
-                    AUTH_TOKEN = stored;
-                    currentUser = data.user;
+                const data = await readJsonResponse(resp, 'Auth restore response');
+                if (resp.ok && data && data.ok && data.user) {
+                    saveAuthSession(stored, data.user);
                     onAuthSuccess();
                 } else {
-                    localStorage.removeItem('lb_token');
-                    document.getElementById('authOverlay').classList.remove('hidden');
+                    console.error('Stored session rejected:', resp.status, data);
+                    clearAuthSession();
+                    showAuthOverlay();
                 }
-            } catch (_e) {
-                // Network error: still show auth overlay
-                localStorage.removeItem('lb_token');
-                document.getElementById('authOverlay').classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to restore auth session:', error);
+                clearAuthSession();
+                showAuthOverlay();
             }
         }
 
@@ -1578,6 +1643,8 @@
         document.getElementById('regConfirm').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') doRegister();
         });
+        bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
+        bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
 
         async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
@@ -1590,7 +1657,7 @@
             if (!AUTH_TOKEN || !currentUser) {
                 playSound('error');
                 showToast('Please sign in to submit');
-                document.getElementById('authOverlay').classList.remove('hidden');
+                showAuthOverlay();
                 return;
             }
             const btn = document.getElementById('sendBtn');
@@ -1609,8 +1676,8 @@
                     headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
                     body: formData
                 });
-                const data = await resp.json();
-                if (data.ok) {
+                const data = await readJsonResponse(resp, 'Submission response');
+                if (data && data.ok) {
                     playSound('sold');
                     showToast('📨 Sent to admin! Waiting for confirmation...');
                     screenshotFile = null;
@@ -1813,8 +1880,8 @@
     }
 }
 
-initTier('standard');
-        initAuth();
+        initTier('standard');
+        initAuthState();
     </script>
 </body>
 </html>

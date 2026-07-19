@@ -16,6 +16,10 @@
             --accent: #f59e0b;
             --accent2: #10b981;
             --accent3: #ef4444;
+            --pending-border: var(--accent);
+            --pending-text: #fde68a;
+            --sold-border: var(--accent2);
+            --sold-text: #d1fae5;
             --text: #f1f5f9;
             --text2: #94a3b8;
             --border: #1e293b;
@@ -24,23 +28,28 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100%; overflow: hidden; }
+        html, body { min-height: 100%; overflow-x: hidden; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             background: var(--bg); 
             color: var(--text); 
+            overflow-y: auto;
             padding-top: var(--tg-safe-top);
             padding-bottom: var(--tg-safe-bottom);
         }
 
         .app { 
+            width: 100%;
             max-width: 500px; 
             margin: 0 auto; 
-            height: 100vh; 
+            height: 100vh;
             height: 100dvh;
+            min-height: 100vh; 
+            min-height: 100dvh;
             display: flex; 
             flex-direction: column; 
             position: relative;
+            overflow: hidden;
         }
 
         /* ===== HEADER ===== */
@@ -100,18 +109,17 @@
 
         /* ===== TIER SELECTOR ===== */
         .tier-bar {
-            display: flex; gap: 6px; padding: 10px 12px;
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 12px;
             background: var(--card); border-bottom: 1px solid var(--border);
-            overflow-x: auto; flex-shrink: 0;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
+            flex-shrink: 0;
         }
-        .tier-bar::-webkit-scrollbar { display: none; }
         .tier-btn {
-            flex-shrink: 0; padding: 8px 14px; border-radius: 20px;
+            min-height: 56px; padding: 8px 10px; border-radius: 16px;
             border: 1.5px solid var(--border); background: var(--card2);
             color: var(--text2); font-size: 12px; font-weight: 600;
-            cursor: pointer; transition: all 0.2s; white-space: nowrap;
+            cursor: pointer; transition: all 0.2s; white-space: normal;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; line-height: 1.25;
         }
         .tier-btn.active {
             background: linear-gradient(135deg, var(--accent), #fbbf24);
@@ -180,41 +188,44 @@
 
         /* ===== SCROLLABLE ===== */
         .scroll-area {
-            flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+            flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
+            padding-bottom: 12px;
         }
         .scroll-area::-webkit-scrollbar { display: none; }
 
         /* ===== TICKETS ===== */
         .tickets-section { padding: 12px; }
         .ticket-grid {
-            display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
         }
         .ticket {
             background: var(--card2); border: 1.5px solid var(--border); border-radius: 8px;
-            padding: 6px 2px; text-align: center; cursor: pointer; transition: all 0.15s;
-            position: relative; min-height: 52px; display: flex; flex-direction: column;
+            padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.15s;
+            position: relative; min-height: 58px; display: flex; flex-direction: column;
             justify-content: center; align-items: center; user-select: none;
         }
         .ticket:active { transform: scale(0.95); }
         .ticket:hover { border-color: var(--accent); }
         .ticket.sold {
-            background: rgba(16,185,129,0.08); border-color: var(--accent2);
+            background: rgba(16,185,129,0.16); border-color: var(--sold-border);
         }
         .ticket.pending {
-            background: rgba(245,158,11,0.08); border-color: var(--accent);
+            background: rgba(245,158,11,0.16); border-color: var(--pending-border);
             animation: pulse-border 2s infinite;
         }
         @keyframes pulse-border {
             0%,100% { border-color: var(--accent); }
             50% { border-color: transparent; }
         }
-        .ticket .num { font-size: 13px; font-weight: 700; color: var(--text); }
+        .ticket .num { font-size: 14px; font-weight: 800; color: var(--text); letter-spacing: 0.2px; }
         .ticket .buyer {
-            font-size: 7px; color: var(--accent2); font-weight: 600; margin-top: 1px;
+            font-size: 8px; color: var(--accent2); font-weight: 600; margin-top: 2px;
             max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .ticket .status-icon { font-size: 9px; margin-top: 1px; }
+        .ticket.pending .num, .ticket.pending .buyer { color: var(--pending-text); }
+        .ticket.sold .num, .ticket.sold .buyer { color: var(--sold-text); }
         .ticket.sold .status-icon { color: var(--accent2); }
         .ticket.pending .status-icon { color: var(--accent); }
 
@@ -284,11 +295,11 @@
         .nav-btn .icon { font-size: 16px; }
 
         /* ===== SCREENS ===== */
-        .screen { display: none; flex-direction: column; height: 100%; }
+        .screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
         .screen.active { display: flex; }
 
         /* ===== DRAW SCREEN ===== */
-        .draw-screen { display: none; flex-direction: column; align-items: center; justify-content: center;
+        .draw-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; align-items: center; justify-content: center;
             height: 100%; padding: 20px; text-align: center;
         }
         .draw-screen.active { display: flex; }
@@ -317,7 +328,7 @@
         .draw-btn:disabled { opacity: 0.5; }
 
         /* ===== WINNERS SCREEN ===== */
-        .winners-screen { display: none; padding: 16px 12px; overflow-y: auto; }
+        .winners-screen { display: none; flex: 1 1 auto; min-height: 0; padding: 16px 12px; overflow-y: auto; }
         .winners-screen.active { display: block; }
         .winners-title { text-align: center; font-size: 16px; font-weight: 800; margin-bottom: 16px; color: var(--accent); }
         .winner-card {
@@ -348,7 +359,7 @@
         .reset-btn:active { border-color: var(--accent); }
 
         /* ===== RULES SCREEN ===== */
-        .rules-screen { display: none; padding: 16px 12px; overflow-y: auto; }
+        .rules-screen { display: none; flex: 1 1 auto; min-height: 0; padding: 16px 12px; overflow-y: auto; }
         .rules-screen.active { display: block; }
         .rules-card {
             background: var(--card2); border-radius: 10px; padding: 14px; margin-bottom: 10px;
@@ -471,19 +482,210 @@
         }
         .empty-state .icon { font-size: 32px; margin-bottom: 8px; }
 
+        :focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 2px;
+        }
+        .ticket:focus-visible,
+        .tier-btn:focus-visible,
+        .nav-btn:focus-visible,
+        .copy:focus-visible,
+        .send-btn:focus-visible,
+        .draw-btn:focus-visible,
+        .reset-btn:focus-visible,
+        .modal .actions button:focus-visible,
+        .admin-toggle:focus-visible {
+            box-shadow: 0 0 0 3px rgba(245,158,11,0.28);
+        }
+
+        @media (min-width: 360px) {
+            .ticket-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        }
+
+        @media (min-width: 768px) {
+            .ticket-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
         #fileInput { display: none; }
+
+        /* ===== AUTH OVERLAY ===== */
+        .auth-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: var(--bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 16px; overflow-y: auto;
+        }
+        .auth-overlay.hidden { display: none; }
+
+        .auth-logo { text-align: center; margin-bottom: 20px; }
+        .auth-logo .flag { font-size: 36px; }
+        .auth-logo h2 { font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 4px; }
+        .auth-logo p { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+        .auth-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%; max-width: 380px;
+        }
+
+        .auth-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+        .auth-form { display: flex; flex-direction: column; gap: 12px; }
+
+        .auth-input-group { display: flex; flex-direction: column; gap: 5px; }
+        .auth-input-group label { font-size: 12px; font-weight: 600; color: var(--text2); }
+
+        .auth-input {
+            background: var(--card2);
+            border: 1px solid var(--border);
+            color: var(--text); padding: 12px;
+            border-radius: 8px; font-size: 14px;
+            font-family: inherit; outline: none; width: 100%;
+        }
+        .auth-input:focus { border-color: var(--accent); }
+
+        .auth-btn {
+            background: var(--accent); color: var(--bg);
+            border: none; padding: 14px; border-radius: 8px;
+            font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+            margin-top: 4px; font-family: inherit;
+        }
+        .auth-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .auth-link { text-align: center; font-size: 13px; color: var(--text2); margin-top: 12px; }
+        .auth-link a { color: var(--accent); cursor: pointer; font-weight: 600; }
+
+        .auth-note {
+            margin: 14px auto 0; max-width: 360px; text-align: center;
+            font-size: 12px; line-height: 1.5; color: var(--text2);
+        }
+
+        .auth-error {
+            color: #fca5a5;
+            font-size: 12px;
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            padding: 10px 12px; border-radius: 8px; display: none;
+        }
+        .auth-error.show { display: block; }
+
+        .auth-setup-status {
+            margin: 12px auto 0; max-width: 360px;
+            color: #fde68a; font-size: 12px; line-height: 1.5;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            padding: 10px 12px; border-radius: 10px; display: none;
+        }
+        .auth-setup-status.show { display: block; }
+
+        .auth-screen { display: none; }
+        .auth-screen.active { display: block; }
+
+        .pw-hint { font-size: 11px; color: var(--text2); margin-top: 2px; }
+        .pw-strength { height: 4px; border-radius: 2px; background: var(--border); margin-top: 5px; overflow: hidden; }
+        .pw-strength-bar { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; width: 0%; }
+
+        /* User info in header */
+        .user-info {
+            display: none; align-items: center; gap: 8px;
+            background: var(--card2); border: 1px solid var(--border);
+            border-radius: 20px; padding: 4px 12px;
+            font-size: 12px; margin-top: 8px; cursor: pointer;
+        }
+        .user-info.show { display: inline-flex; }
+        .user-info .user-name { font-weight: 700; color: var(--text); }
+        .user-info .user-balance { color: var(--accent); font-weight: 600; }
     </style>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
 <body>
-    <div class="app">
-        <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">👤 Admin</button>
+    <!-- AUTH OVERLAY -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-logo">
+            <div class="flag">🇪🇹</div>
+            <h2>🎰 LUCKY BIRR</h2>
+            <p>Live Draw • Instant Win</p>
+        </div>
+        <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL. It appears after signing in with a configured admin email.</div>
+        <div class="auth-setup-status" id="authSetupStatus"></div>
+
+        <!-- Login Screen -->
+        <div class="auth-screen active" id="screenLoginAuth">
+            <div class="auth-card">
+                <div class="auth-title">Welcome back</div>
+                <div id="loginError" class="auth-error"></div>
+                <div class="auth-form">
+                    <div class="auth-input-group">
+                        <label for="loginEmail">Email</label>
+                        <input class="auth-input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="loginPassword">Password</label>
+                        <input class="auth-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+                    </div>
+                    <button class="auth-btn" id="loginBtn" onclick="doLogin()">Sign In</button>
+                </div>
+                <div class="auth-link">Don't have an account? <a onclick="showRegisterScreen()">Register</a></div>
+            </div>
+        </div>
+
+        <!-- Register Screen -->
+        <div class="auth-screen" id="screenRegisterAuth">
+            <div class="auth-card">
+                <div class="auth-title">Create account</div>
+                <div id="registerError" class="auth-error"></div>
+                <div class="auth-form">
+                    <div class="auth-input-group">
+                        <label for="regFullName">Full Name</label>
+                        <input class="auth-input" id="regFullName" type="text" placeholder="Abebe Kebede" autocomplete="name">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regEmail">Email</label>
+                        <input class="auth-input" id="regEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regPhone">Phone (optional)</label>
+                        <input class="auth-input" id="regPhone" type="tel" placeholder="0911234567" autocomplete="tel">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regPassword">Password</label>
+                        <input class="auth-input" id="regPassword" type="password" placeholder="Min 8 chars, upper+lower+number" autocomplete="new-password" oninput="updatePwStrength()">
+                        <div class="pw-strength"><div class="pw-strength-bar" id="pwStrengthBar"></div></div>
+                        <div class="pw-hint" id="pwHint">At least 8 characters with uppercase, lowercase and number</div>
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regConfirm">Confirm Password</label>
+                        <input class="auth-input" id="regConfirm" type="password" placeholder="Repeat password" autocomplete="new-password">
+                    </div>
+                    <button class="auth-btn" id="registerBtn" onclick="doRegister()">Create Account</button>
+                </div>
+                <div class="auth-link">Already have an account? <a onclick="showLoginScreen()">Sign In</a></div>
+            </div>
+        </div>
+    </div>
+    <div class="app" id="app">
+        <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()" style="display:none;">👤 Admin</button>
 
         <div class="header">
             <div class="flag">🇪🇹</div>
             <h1>🎰 LUCKY BIRR</h1>
-            <p class="sub">Telegram Mini App • Live Draw • Instant Win</p>
+            <p class="sub">Live Draw • Instant Win</p>
             <div class="live-pill"><div class="dot"></div> LIVE</div>
+            <div class="user-info" id="userInfoBar" onclick="showUserMenu()">
+                <span>👤</span>
+                <span class="user-name" id="headerUserName"></span>
+                <span class="user-balance" id="headerUserBalance"></span>
+            </div>
         </div>
 
         <!-- ADMIN PANEL -->
@@ -565,13 +767,13 @@
 
                 <div class="screenshot-section">
                     <div class="section-title"><div class="dot"></div> Send Payment Proof</div>
-                    <div class="screenshot-upload" id="screenshotUpload" onclick="document.getElementById('fileInput').click()">
+                    <div class="screenshot-upload" id="screenshotUpload" role="button" tabindex="0" aria-label="Upload payment screenshot" onclick="document.getElementById('fileInput').click()">
                         <div class="icon" id="uploadIcon">📤</div>
                         <div class="text" id="uploadText">Tap to upload payment screenshot</div>
                         <div class="sub">Telebirr, Dashen, or CBE receipt</div>
                     </div>
                     <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
-                    <input type="number" class="amount-input" id="paymentAmount" placeholder="Amount paid (ETB)" min="10">
+                    <input type="number" class="amount-input" id="paymentAmount" placeholder="Amount paid (ETB)" min="10" aria-label="Amount paid in Ethiopian Birr">
                     <button class="send-btn" id="sendBtn" onclick="sendScreenshot()" disabled>
                         📨 Send to Admin
                     </button>
@@ -782,6 +984,314 @@
         let selectedTicket = null;
         let drawInProgress = false;
         let screenshotFile = null;
+        let drawRollInterval = null;
+        let drawTimeouts = [];
+        const WEBAPP_URL = window.location.href.split('#')[0];
+
+        // ===== AUTH STATE =====
+        const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
+        const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token';
+        const AUTH_LOADING_OPACITY = '0.55';
+        let AUTH_TOKEN = null;
+        let currentUser = null;
+
+        function showLoginScreen() {
+            document.getElementById('screenLoginAuth').classList.add('active');
+            document.getElementById('screenRegisterAuth').classList.remove('active');
+        }
+
+        function showRegisterScreen() {
+            document.getElementById('screenRegisterAuth').classList.add('active');
+            document.getElementById('screenLoginAuth').classList.remove('active');
+        }
+
+        function setAuthError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.classList.toggle('show', !!msg);
+        }
+
+        function setAuthButtonState(btn, isLoading, idleText, loadingText) {
+            btn.disabled = isLoading;
+            btn.textContent = isLoading ? loadingText : idleText;
+            btn.style.opacity = isLoading ? AUTH_LOADING_OPACITY : '';
+            if (isLoading) {
+                btn.setAttribute('aria-busy', 'true');
+            } else {
+                btn.removeAttribute('aria-busy');
+            }
+        }
+
+        function saveAuthSession(token, user) {
+            AUTH_TOKEN = token;
+            currentUser = user;
+            localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+        }
+
+        function clearAuthSession() {
+            AUTH_TOKEN = null;
+            currentUser = null;
+            localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+        }
+
+        function getPersistedAuthToken() {
+            const stored = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            if (stored) {
+                return stored;
+            }
+            const legacy = localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            if (legacy) {
+                localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacy);
+                localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+                return legacy;
+            }
+            return null;
+        }
+
+        function getAuthErrorMessage(resp, data, fallback) {
+            if (data && typeof data.error === 'string' && data.error.trim()) {
+                return data.error;
+            }
+            if (resp.status === 400) return fallback;
+            if (resp.status === 401) return 'Invalid email or password';
+            return 'Something went wrong. Please try again.';
+        }
+
+        async function readJsonResponse(resp, context) {
+            try {
+                return await resp.json();
+            } catch (error) {
+                console.error(context + ' returned invalid JSON:', error);
+                return null;
+            }
+        }
+
+        function showAuthOverlay() {
+            document.getElementById('authOverlay').classList.remove('hidden');
+            showLoginScreen();
+            loadAuthSetupStatus();
+            checkSendReady();
+        }
+
+        function setAuthSetupStatus(message) {
+            const el = document.getElementById('authSetupStatus');
+            el.textContent = message;
+            el.classList.toggle('show', !!message);
+        }
+
+        function formatBlockerList(items) {
+            if (items.length <= 1) return items[0] || '';
+            if (items.length === 2) return `${items[0]} and ${items[1]}`;
+            return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+        }
+
+        async function loadAuthSetupStatus() {
+            try {
+                const resp = await fetch('/readyz', { cache: 'no-store' });
+                const data = await readJsonResponse(resp, 'Ready status');
+                if (resp.ok) {
+                    setAuthSetupStatus('');
+                    return;
+                }
+                if (!data || typeof data !== 'object') {
+                    setAuthSetupStatus('Registration and sign-in are temporarily unavailable.');
+                    return;
+                }
+                const blockers = [];
+                if (data.checks && data.checks.database === false) {
+                    blockers.push('database setup is incomplete');
+                }
+                if (data.checks && data.checks.jwt === false) {
+                    blockers.push('server authentication is not configured');
+                }
+                if (blockers.length > 0) {
+                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}.`);
+                    return;
+                }
+                if (typeof data.detail === 'string' && data.detail.trim()) {
+                    setAuthSetupStatus(data.detail.trim());
+                    return;
+                }
+                setAuthSetupStatus('');
+            } catch (_error) {
+                setAuthSetupStatus('');
+            }
+        }
+
+        function bindAuthErrorClear(inputIds, errorId) {
+            inputIds.forEach((id) => {
+                document.getElementById(id).addEventListener('input', () => setAuthError(errorId, ''));
+            });
+        }
+
+        function updatePwStrength() {
+            const pw = document.getElementById('regPassword').value;
+            const bar = document.getElementById('pwStrengthBar');
+            const hint = document.getElementById('pwHint');
+            let score = 0;
+            if (pw.length >= 8) score++;
+            if (/[A-Z]/.test(pw)) score++;
+            if (/[a-z]/.test(pw)) score++;
+            if (/[0-9]/.test(pw)) score++;
+            if (/[^A-Za-z0-9]/.test(pw)) score++;
+            const pct = (score / 5) * 100;
+            bar.style.width = pct + '%';
+            bar.style.background = score <= 2 ? '#ef4444' : score === 3 ? '#f59e0b' : '#10b981';
+            hint.textContent = score <= 2 ? 'Weak – add uppercase, number, or symbol' :
+                               score === 3 ? 'Fair – almost there' : 'Strong password ✓';
+        }
+
+        async function doLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            setAuthError('loginError', '');
+            if (!email || !password) {
+                setAuthError('loginError', 'Email and password are required');
+                return;
+            }
+            const btn = document.getElementById('loginBtn');
+            setAuthButtonState(btn, true, 'Sign In', '⏳ Signing in...');
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await readJsonResponse(resp, 'Login response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
+                    saveAuthSession(data.token, data.user);
+                    onAuthSuccess();
+                } else {
+                    console.error('Login failed:', resp.status, data);
+                    setAuthError('loginError', getAuthErrorMessage(resp, data, 'Please enter your email and password'));
+                }
+            } catch (error) {
+                console.error('Login request failed:', error);
+                setAuthError('loginError', 'Network error. Please try again.');
+            } finally {
+                setAuthButtonState(btn, false, 'Sign In', '⏳ Signing in...');
+            }
+        }
+
+        async function doRegister() {
+            const fullName = document.getElementById('regFullName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('regConfirm').value;
+            setAuthError('registerError', '');
+
+            if (!email || !password) {
+                setAuthError('registerError', 'Email and password are required');
+                return;
+            }
+            if (password !== confirm) {
+                setAuthError('registerError', 'Passwords do not match');
+                return;
+            }
+            if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+                setAuthError('registerError', 'Password must be 8+ chars with uppercase, lowercase and number');
+                return;
+            }
+
+            const btn = document.getElementById('registerBtn');
+            setAuthButtonState(btn, true, 'Create Account', '⏳ Creating account...');
+            try {
+                const resp = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, phone, password, fullName })
+                });
+                const data = await readJsonResponse(resp, 'Register response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
+                    saveAuthSession(data.token, data.user);
+                    onAuthSuccess();
+                } else {
+                    console.error('Registration failed:', resp.status, data);
+                    setAuthError('registerError', getAuthErrorMessage(resp, data, 'Please review your registration details'));
+                }
+            } catch (error) {
+                console.error('Registration request failed:', error);
+                setAuthError('registerError', 'Network error. Please try again.');
+            } finally {
+                setAuthButtonState(btn, false, 'Create Account', '⏳ Creating account...');
+            }
+        }
+
+        function onAuthSuccess() {
+            document.getElementById('authOverlay').classList.add('hidden');
+            setAuthSetupStatus('');
+            // Show user info in header
+            const name = currentUser.fullName || currentUser.email || 'Player';
+            document.getElementById('headerUserName').textContent = name.split(' ')[0];
+            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0) + ' ETB';
+            document.getElementById('userInfoBar').classList.add('show');
+            // Update admin state from server
+            isAdmin = currentUser.isAdmin === true;
+            updateAdminToggleVisibility();
+            checkSendReady();
+        }
+
+        function updateAdminToggleVisibility() {
+            const btn = document.getElementById('adminToggle');
+            btn.style.display = isAdmin ? '' : 'none';
+        }
+
+        function showUserMenu() {
+            const name = currentUser ? (currentUser.fullName || currentUser.email) : '';
+            const balance = currentUser ? currentUser.balance || 0 : 0;
+            if (confirm(`👤 ${name}\n💰 Balance: ${balance} ETB\n\nSign out?`)) {
+                doLogout();
+            }
+        }
+
+        async function doLogout() {
+            if (AUTH_TOKEN) {
+                try {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                    });
+                } catch (_e) { /* silent */ }
+            }
+            clearAuthSession();
+            isAdmin = false;
+            document.getElementById('userInfoBar').classList.remove('show');
+            document.getElementById('adminPanel').classList.remove('active');
+            document.getElementById('adminToggle').classList.remove('active');
+            document.getElementById('adminToggle').textContent = '👤 Admin';
+            updateAdminToggleVisibility();
+            checkSendReady();
+            showAuthOverlay();
+        }
+
+        async function initAuthState() {
+            const stored = getPersistedAuthToken();
+            if (!stored) {
+                showAuthOverlay();
+                return;
+            }
+            try {
+                const resp = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + stored }
+                });
+                const data = await readJsonResponse(resp, 'Auth restore response');
+                if (resp.ok && data && data.ok && data.user) {
+                    saveAuthSession(stored, data.user);
+                    onAuthSuccess();
+                } else {
+                    console.error('Stored session rejected:', resp.status, data);
+                    clearAuthSession();
+                    showAuthOverlay();
+                }
+            } catch (error) {
+                console.error('Failed to restore auth session:', error);
+                clearAuthSession();
+                showAuthOverlay();
+            }
+        }
 
         function getCurrentPlayerName() {
             const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
@@ -797,7 +1307,44 @@
             return user ? user.id.toString() : 'local_player';
         }
 
+        function queueDrawTimeout(callback, delay) {
+            const id = setTimeout(() => {
+                drawTimeouts = drawTimeouts.filter(timeoutId => timeoutId !== id);
+                callback();
+            }, delay);
+            drawTimeouts.push(id);
+            return id;
+        }
+
+        function runIfDrawActive(callback) {
+            if (!drawInProgress) return;
+            callback();
+        }
+
+        function clearDrawTimers() {
+            drawTimeouts.forEach(clearTimeout);
+            drawTimeouts = [];
+            if (drawRollInterval) {
+                clearInterval(drawRollInterval);
+                drawRollInterval = null;
+            }
+        }
+
+        function resetDrawUiState() {
+            const ball = document.getElementById('drawBall');
+            ball.classList.remove('rolling');
+            ball.textContent = '?';
+            ball.style.background = '';
+            document.getElementById('drawBtn').style.display = 'block';
+            document.getElementById('drawCountdown').style.display = 'block';
+            document.getElementById('ballContainer').style.display = 'none';
+            document.getElementById('drawStatus').textContent = 'Ready!';
+        }
+
         function initTier(tierKey) {
+            clearDrawTimers();
+            drawInProgress = false;
+            resetDrawUiState();
             currentTier = tierKey;
             const t = TIERS[tierKey];
             tickets = [];
@@ -841,7 +1388,18 @@
             tickets.forEach(t => {
                 const div = document.createElement('div');
                 div.className = `ticket ${t.status}`;
+                div.setAttribute('role', 'button');
+                div.setAttribute('tabindex', '0');
+                const statusLabel = t.status === 'sold' ? 'confirmed' : t.status === 'pending' ? 'reserved' : 'available';
+                div.setAttribute('aria-label', `Ticket ${String(t.num).padStart(2,'0')} ${statusLabel}`);
                 div.onclick = () => { playSound('tap'); openTicket(t.num); };
+                div.onkeydown = (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        playSound('tap');
+                        openTicket(t.num);
+                    }
+                };
                 let icon = t.status === 'sold' ? '✅' : t.status === 'pending' ? '⏳' : '';
                 div.innerHTML = `
                     <div class="num">#${String(t.num).padStart(2,'0')}</div>
@@ -924,6 +1482,23 @@
             document.getElementById('adminProfit').textContent = (sold * t.price - (sold >= 3 ? totalPrizes : 0)).toLocaleString();
         }
 
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+            const copied = document.execCommand('copy'); // Legacy fallback for older browsers.
+            document.body.removeChild(helper);
+            return copied;
+        }
+
         function exportData() {
             const t = TIERS[currentTier];
             const sold = tickets.filter(x => x.status === 'sold');
@@ -942,9 +1517,9 @@
 `;
             pending.forEach(x => data += `  #${String(x.num).padStart(2,'0')} - ${x.buyer}
 `);
-            navigator.clipboard.writeText(data).then(() => {
-                showToast('📊 Data copied to clipboard!');
-            });
+            copyToClipboard(data)
+                .then(() => showToast('📊 Data copied to clipboard!'))
+                .catch(() => showToast('❌ Could not copy data.'));
         }
 
         function openTicket(num) {
@@ -1077,21 +1652,23 @@
         }
 
         function toggleAdmin() {
-            isAdmin = !isAdmin;
+            if (!isAdmin) return;
             const btn = document.getElementById('adminToggle');
             const panel = document.getElementById('adminPanel');
             btn.classList.toggle('active');
             panel.classList.toggle('active');
-            btn.textContent = isAdmin ? '🔒 Admin' : '👤 Admin';
-            if (isAdmin) updateAdminPanel();
+            btn.textContent = panel.classList.contains('active') ? '🔒 Admin' : '👤 Admin';
+            if (panel.classList.contains('active')) updateAdminPanel();
         }
 
         function copyText(text, el) {
-            navigator.clipboard.writeText(text).then(() => {
-                el.textContent = '✓';
-                el.classList.add('copied');
-                setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('copied'); }, 1500);
-            }).catch(() => showToast('Copied: ' + text));
+            copyToClipboard(text)
+                .then(() => {
+                    el.textContent = '✓';
+                    el.classList.add('copied');
+                    setTimeout(() => { el.textContent = 'Copy'; el.classList.remove('copied'); }, 1500);
+                })
+                .catch(() => showToast('Copied: ' + text));
         }
 
         function handleFileSelect(event) {
@@ -1107,12 +1684,32 @@
 
         function checkSendReady() {
             const amount = document.getElementById('paymentAmount').value;
-            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0);
+            const authed = !!(AUTH_TOKEN && currentUser);
+            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0 && authed);
         }
 
         document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
+        document.getElementById('screenshotUpload').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                document.getElementById('fileInput').click();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+        document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doLogin();
+        });
+        document.getElementById('regConfirm').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doRegister();
+        });
+        bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
+        bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
 
-        function sendScreenshot() {
+        async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
             const tier = TIERS[currentTier];
             if (!screenshotFile || !amount) {
@@ -1120,26 +1717,49 @@
                 showToast('Please upload screenshot and enter amount');
                 return;
             }
-            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : {};
-            if (tg && tg.sendData) {
-                tg.sendData(JSON.stringify({
-                    action: 'payment_proof',
-                    amount: amount,
-                    tier: currentTier,
-                    tierPrice: tier.price,
-                    user: user,
-                    timestamp: new Date().toISOString()
-                }));
+            if (!AUTH_TOKEN || !currentUser) {
+                playSound('error');
+                showToast('Please sign in to submit');
+                showAuthOverlay();
+                return;
             }
-            playSound('sold');
-            showToast('📨 Sent to admin! Waiting for confirmation...');
-            screenshotFile = null;
-            document.getElementById('fileInput').value = '';
-            document.getElementById('paymentAmount').value = '';
-            document.getElementById('screenshotUpload').classList.remove('has-file');
-            document.getElementById('uploadIcon').textContent = '📤';
-            document.getElementById('uploadText').textContent = 'Tap to upload payment screenshot';
-            document.getElementById('sendBtn').disabled = true;
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            try {
+                const formData = new FormData();
+                formData.append('screenshot', screenshotFile);
+                formData.append('amount', amount);
+                formData.append('tier', currentTier);
+                formData.append('paymentMethod', 'telebirr');
+                if (selectedTicket) formData.append('ticketNumber', String(selectedTicket));
+
+                const resp = await fetch('/api/submissions', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: formData
+                });
+                const data = await readJsonResponse(resp, 'Submission response');
+                if (data && data.ok) {
+                    playSound('sold');
+                    showToast('📨 Sent to admin! Waiting for confirmation...');
+                    screenshotFile = null;
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('paymentAmount').value = '';
+                    document.getElementById('screenshotUpload').classList.remove('has-file');
+                    document.getElementById('uploadIcon').textContent = '📤';
+                    document.getElementById('uploadText').textContent = 'Tap to upload payment screenshot';
+                } else {
+                    playSound('error');
+                    showToast('❌ ' + (data.error || 'Submission failed'));
+                }
+            } catch (_e) {
+                playSound('error');
+                showToast('❌ Network error. Please try again.');
+            } finally {
+                checkSendReady();
+                btn.textContent = '📨 Send to Admin';
+            }
         }
 
         function showToast(msg) {
@@ -1164,6 +1784,7 @@
             const sold = tickets.filter(t => t.status === 'sold');
             if (sold.length < 3) { playSound('error'); showToast('Need at least 3 sold tickets!'); return; }
 
+            clearDrawTimers();
             drawInProgress = true;
             document.getElementById('drawBtn').style.display = 'none';
             document.getElementById('drawCountdown').style.display = 'none';
@@ -1177,37 +1798,53 @@
             const prizes = [t.prizes.first, t.prizes.second, t.prizes.third];
             const colors = ['linear-gradient(135deg, #f59e0b, #fbbf24)', 'linear-gradient(135deg, #94a3b8, #cbd5e1)', 'linear-gradient(135deg, #b45309, #d97706)'];
 
-            const roll = setInterval(() => {
+            drawRollInterval = setInterval(() => {
                 playSound('roll');
                 const r = sold[Math.floor(Math.random() * sold.length)];
                 ball.textContent = '#' + String(r.num).padStart(2,'0');
             }, 80);
 
             [0, 1, 2].forEach(i => {
-                setTimeout(() => {
-                    document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
-                    setTimeout(() => {
-                        clearInterval(roll);
-                        ball.classList.remove('rolling');
-                        ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
-                        ball.style.background = colors[i];
-                        ball.style.animation = 'none'; ball.offsetHeight;
-                        ball.style.animation = 'ball-pulse 0.5s ease-in-out 3';
-                        playSound('win');
+                queueDrawTimeout(() => {
+                    runIfDrawActive(() => {
+                        document.getElementById('drawStatus').textContent = i === 0 ? '1st winner...' : i === 1 ? '2nd winner...' : '3rd winner...';
+                    });
+                    queueDrawTimeout(() => {
+                        runIfDrawActive(() => {
+                            clearInterval(drawRollInterval);
+                            drawRollInterval = null;
+                            ball.classList.remove('rolling');
+                            ball.textContent = '#' + String(winners[i].num).padStart(2,'0');
+                            ball.style.background = colors[i];
+                            ball.style.animation = 'none'; ball.offsetHeight;
+                            ball.style.animation = 'ball-pulse 0.5s ease-in-out 3';
+                            playSound('win');
 
-                        if (i < 2) {
-                            setTimeout(() => {
-                                ball.classList.add('rolling');
-                                const nr = setInterval(() => {
-                                    playSound('roll');
-                                    const r = sold[Math.floor(Math.random() * sold.length)];
-                                    ball.textContent = '#' + String(r.num).padStart(2,'0');
-                                }, 80);
-                                setTimeout(() => clearInterval(nr), 1200);
-                            }, 800);
-                        } else {
-                            setTimeout(() => { createConfetti(); showWinners(winners, prizes); }, 1200);
-                        }
+                            if (i < 2) {
+                                queueDrawTimeout(() => {
+                                    runIfDrawActive(() => {
+                                        ball.classList.add('rolling');
+                                        drawRollInterval = setInterval(() => {
+                                            playSound('roll');
+                                            const r = sold[Math.floor(Math.random() * sold.length)];
+                                            ball.textContent = '#' + String(r.num).padStart(2,'0');
+                                        }, 80);
+                                        queueDrawTimeout(() => {
+                                            if (!drawRollInterval) return;
+                                            clearInterval(drawRollInterval);
+                                            drawRollInterval = null;
+                                        }, 1200);
+                                    });
+                                }, 800);
+                            } else {
+                                queueDrawTimeout(() => {
+                                    runIfDrawActive(() => {
+                                        createConfetti();
+                                        showWinners(winners, prizes);
+                                    });
+                                }, 1200);
+                            }
+                        });
                     }, 1200);
                 }, i === 0 ? 2000 : i === 1 ? 4500 : 7000);
             });
@@ -1244,16 +1881,15 @@
             document.getElementById('winSold').textContent = sold + ' / ' + t.tickets;
 
             drawInProgress = false;
-            document.getElementById('drawBtn').style.display = 'block';
-            document.getElementById('drawCountdown').style.display = 'block';
-            document.getElementById('ballContainer').style.display = 'none';
-            document.getElementById('drawBall').textContent = '?';
-            document.getElementById('drawBall').style.background = '';
-            document.getElementById('drawStatus').textContent = 'Ready!';
+            clearDrawTimers();
+            resetDrawUiState();
         }
 
         function resetDraw() {
             playSound('tap');
+            drawInProgress = false;
+            clearDrawTimers();
+            resetDrawUiState();
             const t = TIERS[currentTier];
             tickets = [];
             for (let i = 1; i <= t.tickets; i++) tickets.push({ num: i, status: 'empty', buyer: '' });
@@ -1287,7 +1923,7 @@
         `🥉 *3rd Winner:* ${w3}\n` +
         `    Prize: ${t.prizes.third} ETB\n\n` +
         `💰 Total Pool: ${sold.length * t.price} ETB\n` +
-        `🎫 Tickets Sold: ${sold.length}/20\n\n` +
+        `🎫 Tickets Sold: ${sold.length}/${t.tickets}\n\n` +
         `🎲 Fair & Transparent\n` +
         `🇪🇹 Made for Ethiopia\n\n` +
         `👇 Play now:`;
@@ -1301,13 +1937,14 @@
     } else if (tg && tg.openTelegramLink) {
         tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(WEBAPP_URL || 'https://t.me/LuckyBirrBot') + '&text=' + encodeURIComponent(shareText));
     } else {
-        navigator.clipboard.writeText(shareText).then(() => {
-            showToast('📋 Results copied! Paste in your group.');
-        });
+        copyToClipboard(shareText)
+            .then(() => showToast('📋 Results copied! Paste in your group.'))
+            .catch(() => showToast('❌ Could not copy results.'));
     }
 }
 
-initTier('standard');
+        initTier('standard');
+        initAuthState();
     </script>
 </body>
 </html>

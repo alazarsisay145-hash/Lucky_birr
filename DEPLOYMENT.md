@@ -1,103 +1,275 @@
-# Deploying Lucky Birr on Render
+# Lucky Birr – Deployment Guide
 
-This guide explains how to deploy Lucky Birr to [Render](https://render.com).
+## Overview
 
----
+Lucky Birr is a full-stack Node.js/Express application. The frontend (`Index.html`) is served by the same Express process that handles all API routes (`/api/auth/*`, `/api/submissions`, `/api/admin/*`).
 
-## Stack
+> **GitHub Pages cannot host this application.** Pages only serves static files; it cannot run the Express backend. Authentication, payments, and all API features would be broken on a static host.
 
-| Layer | Technology |
-|---|---|
-| Frontend | Static HTML/CSS/JS (`Index.html`) |
-| Server | Node.js (`server.js`) – serves static files and a `/healthz` health check |
-| Bot backend | `bot.js` – placeholder for future Telegram bot webhook integration |
+The supported deployment target is **Render** (Node web service). The repository includes a `render.yaml` Blueprint that configures everything automatically.
 
 ---
 
-## Required Environment Variables
+## Prerequisites
 
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | Auto | Injected by Render – do not set manually |
-| `NODE_ENV` | Yes | Set to `production` (handled in `render.yaml`) |
-| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from [@BotFather](https://t.me/BotFather) |
-| `WEBAPP_URL` | Yes | Full public URL of the deployed app (e.g. `https://lucky-birr.onrender.com`) |
-
-Set `TELEGRAM_BOT_TOKEN` and `WEBAPP_URL` as **secret environment variables** in the Render dashboard — never commit them.
+- A [Supabase](https://supabase.com) project (free tier works)
+- A [Render](https://render.com) account (free tier works)
+- (Optional) A Telegram Bot Token for admin notifications
 
 ---
 
-## Build & Start Commands
+## Step 1 – Supabase Setup
 
-| Step | Command |
-|---|---|
-| Build | `npm install --production` |
-| Start | `npm start` (runs `node server.js`) |
-
----
-
-## Deploy on Render
-
-### Option A – Blueprint (recommended)
-
-1. Fork or push this repository to your GitHub account.
-2. In the [Render dashboard](https://dashboard.render.com), click **New → Blueprint**.
-3. Connect your repository – Render will detect `render.yaml` and pre-fill the service settings.
-4. Add the secret env vars (`TELEGRAM_BOT_TOKEN`, `WEBAPP_URL`) in the dashboard.
-5. Click **Apply** – Render builds and deploys automatically.
-
-### Option B – Manual Web Service
-
-1. In the Render dashboard click **New → Web Service**.
-2. Connect your GitHub repository.
-3. Fill in:
-   - **Environment**: `Node`
-   - **Build Command**: `npm install --production`
-   - **Start Command**: `npm start`
-4. Under **Environment Variables**, add:
-   - `NODE_ENV` = `production`
-   - `TELEGRAM_BOT_TOKEN` = *(your bot token)*
-   - `WEBAPP_URL` = *(your Render service URL)*
-5. Click **Create Web Service**.
+1. Open your Supabase project → **SQL Editor**.
+2. Paste and run the full contents of [`supabase.sql`](supabase.sql). The file is idempotent – safe to re-run on a fresh project or an existing project without data loss.
+   - Creates `users`, `submissions`, and `transactions` tables with constraints and indexes.
+   - Creates the `screenshots` storage bucket (idempotent `ON CONFLICT DO NOTHING`).
+3. Copy your project credentials from **Settings → API**:
+   - **Project URL** → `SUPABASE_URL`
+   - **`service_role` secret key** → `SUPABASE_SERVICE_ROLE_KEY` (keep this server-side only)
 
 ---
 
-## Post-Deploy Verification
+## Step 2 – Deploy via Render Blueprint
 
-1. Open the service URL in a browser – you should see the Lucky Birr raffle UI.
-2. Hit the health check endpoint:
-   ```
-   curl https://<your-service>.onrender.com/healthz
-   ```
-   Expected response: `OK`
-3. Set the Telegram Mini App URL in [@BotFather](https://t.me/BotFather):
-   - `/mybots` → select your bot → **Bot Settings → Menu Button** → set the URL to your Render URL.
-4. Open the Mini App inside Telegram and verify ticket selection and payment-proof flow work end-to-end.
+1. Push this repository to GitHub (or fork it).
+2. Go to [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint** → connect this repository.
+3. Render reads `render.yaml` and creates a **Web Service** named `lucky-birr` with:
+   - Build: `npm ci --omit=dev`
+   - Start: `npm start`
+   - Health check: `/healthz`
+   - `JWT_SECRET` auto-generated (no manual action needed)
+4. In the Render dashboard, set the following environment variables:
+
+   | Variable | Value |
+   |---|---|
+   | `SUPABASE_URL` | Your Supabase project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role key |
+   | `WEBSITE_URL` | *(leave blank for first deploy; see Step 3)* |
+   | `ADMIN_EMAILS` | Comma-separated admin email addresses |
+
+5. Click **Apply** / **Deploy**. The first deploy will succeed with `WEBSITE_URL` unset (same-origin API calls from `Index.html` do not require a CORS origin header).
 
 ---
 
-## Local Development
+## Step 3 – Set WEBSITE_URL
+
+After the first successful deploy:
+
+1. Copy your Render service URL from the dashboard (e.g. `https://lucky-birr.onrender.com`).
+2. Go to **Environment → WEBSITE_URL** → paste the URL → save.
+3. Render will automatically redeploy. After the redeploy, only requests from that exact origin (or same-origin requests without an `Origin` header) are accepted by CORS.
+
+> **Why is this needed?** The Render URL is only known after the first deploy. Setting it after the fact is the correct workflow. Without `WEBSITE_URL`, only no-origin (same-origin) requests work, which is sufficient for the initial deploy smoke test.
+
+---
+
+## Step 4 – Verify Deployment
 
 ```bash
-# Install dependencies
-npm install
+# 1. Liveness
+curl https://lucky-birr.onrender.com/healthz
+# Expected: {"ok":true,"uptime":N}
 
-# Copy and edit environment variables
-cp .env.example .env
-# Edit .env with your real values
+# 2. Readiness (DB + JWT configured)
+curl https://lucky-birr.onrender.com/readyz
+# Expected: {"ok":true,"checks":{"database":true,"jwt":true,"telegram":false}}
 
-# Export variables to your shell (or use a tool like direnv)
-export $(grep -v '^#' .env | xargs)
+# 3. Game shell loads
+open https://lucky-birr.onrender.com/
 
-# Start the server
-npm start
-# App is available at http://localhost:3000
+# 4. Registration (smoke test)
+curl -X POST https://lucky-birr.onrender.com/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"smoke@example.com","password":"SmokeTest1","fullName":"Smoke Test"}'
+# Expected: 201 with token
+
+# 5. Login
+curl -X POST https://lucky-birr.onrender.com/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"smoke@example.com","password":"SmokeTest1"}'
+# Expected: 200 with token
 ```
 
 ---
 
-## Notes
+## Environment Variables
 
-- Render's free tier may spin down after inactivity; upgrade to a paid plan for always-on service.
-- The `PORT` is injected by Render – `server.js` reads `process.env.PORT` automatically.
-- Debug mode is off in production (`NODE_ENV=production`).
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET` | **Yes** | auto-generated by Render | Min 32-char random secret for JWT signing |
+| `SUPABASE_URL` | **Yes** | — | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | — | Supabase service role key (server-side only, never expose to clients) |
+| `WEBSITE_URL` | **Prod** | — | Public HTTPS URL for CORS (e.g. `https://lucky-birr.onrender.com`) |
+| `ADMIN_EMAILS` | Prod | — | Comma-separated admin email addresses |
+| `PORT` | No | `10000` | HTTP port (Render sets this automatically) |
+| `NODE_ENV` | No | `development` | Set to `production` in production |
+| `SUPABASE_BUCKET` | No | `screenshots` | Supabase storage bucket name |
+| `TELEGRAM_BOT_TOKEN` | No | — | Telegram bot token – enables outbound admin notifications |
+| `ADMIN_CHAT_ID` | No | — | Telegram chat/user ID for notifications |
+| `TELEGRAM_WEBHOOK_SECRET` | No | — | Secret path segment – enables inbound webhook endpoint |
+
+> **Note:** `TELEGRAM_WEBHOOK_SECRET` is only required for the inbound `/webhook/:secret` endpoint. It is **not** required for outbound admin notifications (those only need `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID`).
+
+---
+
+
+## Local Development
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/alazarsisay145-hash/Lucky_birr.git
+cd Lucky_birr
+
+# 2. Install dependencies (deterministic)
+npm ci
+
+# 3. Copy and configure environment variables
+cp .env.example .env
+# Edit .env – at minimum set JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+# 4. Start the server
+npm start
+# App available at http://localhost:10000
+```
+
+---
+
+## Telegram Setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) → copy the token to `TELEGRAM_BOT_TOKEN`.
+2. Set `ADMIN_CHAT_ID` to your Telegram user or group chat ID.
+3. Optional – enable inbound webhook:
+   ```
+   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/<SECRET>
+   ```
+   where `<SECRET>` matches `TELEGRAM_WEBHOOK_SECRET`.
+
+---
+
+## Docker Deployment
+
+```bash
+# Build the image
+docker build -t lucky-birr .
+
+# Run the container
+docker run -d \
+  --name lucky-birr \
+  -p 10000:10000 \
+  --env-file .env \
+  lucky-birr
+
+# Check health
+docker inspect --format='{{.State.Health.Status}}' lucky-birr
+```
+
+The Dockerfile:
+- Uses `node:22-alpine`
+- Installs only production dependencies via `npm ci`
+- Runs as a non-root user
+- Exposes port 10000 (matches default `PORT`)
+- Includes a `HEALTHCHECK` against `/healthz`
+
+---
+
+## Health and Readiness Endpoints
+
+| Endpoint | Purpose | Success |
+|---|---|---|
+| `GET /healthz` | Process liveness | `200 { ok: true, uptime: N }` |
+| `GET /readyz` | Dependency readiness (DB + JWT) | `200 { ok: true, checks: {...} }` |
+
+Use `/readyz` in your load balancer/orchestrator readiness probe. It returns `503` if the database or JWT secret is not configured.
+
+---
+
+## Admin-Panel-Only Quick Setup (No Telegram)
+
+If you are running without Telegram (admin panel only):
+
+1. **Required Render environment variables:**
+
+   | Variable | Value |
+   |---|---|
+   | `SUPABASE_URL` | Your Supabase project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role (server-side only) |
+   | `JWT_SECRET` | Auto-generated by Render Blueprint |
+   | `WEBSITE_URL` | `https://your-service.onrender.com` |
+   | `ADMIN_EMAILS` | Exact email(s) that will have admin access, comma-separated |
+
+2. **Do not set** `TELEGRAM_BOT_TOKEN`, `ADMIN_CHAT_ID`, or `TELEGRAM_WEBHOOK_SECRET`. When all three Telegram variables are unset, no Telegram-related warnings will be logged at startup.
+
+3. **Register with the exact email listed in `ADMIN_EMAILS`** (matching is case-insensitive and trims whitespace). After registering, log in – the Admin panel button appears automatically.
+
+4. **Diagnose failures** by opening `/readyz` in your browser:
+   - `database: true` → Supabase connected and `users` table exists
+   - `database: false` + `detail` → check the detail message (e.g., missing env var, missing table)
+   - `jwt: false` → `JWT_SECRET` is missing
+
+---
+
+## Production Deployment Checklist
+
+- [ ] Supabase tables and storage bucket created (run `supabase.sql` in the Supabase SQL Editor)
+- [ ] Render Blueprint deployed (`render.yaml`)
+- [ ] `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in Render dashboard
+- [ ] `JWT_SECRET` auto-generated by Render (verify it is set)
+- [ ] `WEBSITE_URL` set to Render service URL after first deploy
+- [ ] `ADMIN_EMAILS` set to the email you will register/log in with (exact match, case-insensitive)
+- [ ] `GET /healthz` returns `200 {"ok":true}`
+- [ ] `GET /readyz` returns `200 {"ok":true,"checks":{"database":true,"jwt":true}}`
+- [ ] Registration and login work end-to-end using the email in `ADMIN_EMAILS`
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` is only in server environment, never in client code
+- [ ] `npm audit --audit-level=high` reports zero findings
+
+---
+
+## Rollback
+
+1. Identify the previous working git ref or Render deploy.
+2. In Render dashboard → Deploys → select previous deploy → **Rollback**.
+3. No database migration is needed for app-only rollbacks (schema changes are additive and idempotent).
+4. Verify `GET /readyz` returns `200` after rollback.
+
+---
+
+## Operations
+
+### Logs
+- Structured request logs via `morgan` (format: `tiny` in production, `dev` locally).
+- Errors logged to stderr with `console.error`.
+- Use Render's log dashboard or `render logs` CLI.
+
+### Backups
+- Enable Supabase Point-in-Time Recovery (PITR) in the Supabase dashboard.
+- For free-tier projects, periodically export data via the Supabase table editor.
+
+### Secret Rotation
+- `JWT_SECRET`: update the env var in Render → redeploy. All existing tokens are immediately invalidated; users must log in again.
+- `SUPABASE_SERVICE_ROLE_KEY`: rotate in Supabase dashboard → update env var in Render → redeploy.
+- `TELEGRAM_BOT_TOKEN`: generate a new token via BotFather → update env var → re-register webhook URL.
+
+### Runbook
+
+**`GET /readyz` returns 503**
+- Open `/readyz` in your browser and read the `detail` field
+- If `detail` mentions `SUPABASE_URL`: set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Render
+- If `detail` mentions `users table not found`: run `supabase.sql` in the Supabase SQL Editor
+- If `detail` mentions connectivity: verify Supabase project is active and not paused (free-tier projects pause after inactivity)
+- If `jwt: false`: set `JWT_SECRET` in Render
+
+**Registration or Sign In fails**
+- Check `/readyz` first (see above)
+- Confirm `ADMIN_EMAILS` includes the exact email you registered with (matching is case-insensitive)
+- Confirm `SUPABASE_SERVICE_ROLE_KEY` is the **service role** key, not the anon/public key
+- Check Render logs for server-side error details (e.g., `Supabase user insert failed: 42P01`)
+
+**Telegram notifications not sending** (optional – skip if Telegram is disabled)
+- Verify `TELEGRAM_BOT_TOKEN` and `ADMIN_CHAT_ID` are set (webhook secret is **not** required for notifications)
+- Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`
+
+**CORS errors in browser**
+- Confirm `WEBSITE_URL` exactly matches your Render service URL (including `https://`, no trailing slash)
+- After updating `WEBSITE_URL`, trigger a redeploy in Render
+

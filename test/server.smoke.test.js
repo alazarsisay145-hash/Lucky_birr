@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,6 +26,10 @@ async function stopServer(server, getStderr) {
     wait(2000)
   ]);
   assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${getStderr()}`);
+}
+
+function readGameShell() {
+  return fs.readFileSync(path.join(process.cwd(), 'Index.html'), 'utf8');
 }
 
 test('server serves the game shell', async () => {
@@ -167,4 +173,24 @@ test('GET /api/admin/submissions returns 401 without token', async () => {
   } finally {
     await stopServer(server, getStderr);
   }
+});
+
+test('game shell auth flow stores and restores AUTH_TOKEN', () => {
+  const html = readGameShell();
+  assert.match(html, /const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN'/);
+  assert.match(html, /localStorage\.setItem\(AUTH_TOKEN_STORAGE_KEY, token\)/);
+  assert.match(html, /localStorage\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /localStorage\.removeItem\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.doesNotMatch(html, /lb_token/);
+});
+
+test('game shell auth flow initializes persisted auth and protects submissions', () => {
+  const html = readGameShell();
+  assert.match(html, /async function initAuthState\(\)/);
+  assert.match(html, /fetch\('\/api\/auth\/login'/);
+  assert.match(html, /fetch\('\/api\/auth\/register'/);
+  assert.match(html, /fetch\('\/api\/auth\/me'/);
+  assert.match(html, /const token = AUTH_TOKEN \|\| localStorage\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ token \}/);
+  assert.match(html, /initAuthState\(\);/);
 });

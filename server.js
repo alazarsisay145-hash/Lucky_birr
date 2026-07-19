@@ -47,7 +47,7 @@ const WEBSITE_URL = (() => {
   if (!raw) {
     console.warn(
       'WEBSITE_URL is not set. CORS will only allow requests without an Origin header.' +
-      ' Set WEBSITE_URL to your deployed service URL (e.g. https://lucky-birr.onrender.com) in the Render dashboard.'
+      ' Set WEBSITE_URL to your deployed service URL (e.g. https://lucky-birr.onrender.com) in your deployment environment variables.'
     );
     return '';
   }
@@ -55,14 +55,16 @@ const WEBSITE_URL = (() => {
     const parsed = new URL(raw);
     if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
       console.warn(
-        `WEBSITE_URL "${raw}" is not HTTPS. In production, CORS should only allow HTTPS origins.`
+        `WEBSITE_URL "${raw}" uses ${parsed.protocol} instead of https:. ` +
+        'In production, CORS must only allow HTTPS origins to prevent mixed-content and eavesdropping attacks. ' +
+        'Update WEBSITE_URL to an https:// URL.'
       );
     }
     return parsed.origin;
   } catch {
     console.warn(
       `WEBSITE_URL "${raw}" is not a valid URL. CORS will only allow requests without an Origin header.` +
-      ' Set WEBSITE_URL to your deployed service URL (e.g. https://lucky-birr.onrender.com) in the Render dashboard.'
+      ' Update WEBSITE_URL to a valid deployed service URL (e.g. https://lucky-birr.onrender.com) in your deployment environment variables.'
     );
     return '';
   }

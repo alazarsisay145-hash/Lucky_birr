@@ -143,9 +143,9 @@ npm start
 2. Set `ADMIN_CHAT_ID` to your Telegram user or group chat ID.
 3. Optional – enable inbound webhook:
    ```
-   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/<SECRET>
+   https://api.telegram.org/bot{YOUR_TOKEN}/setWebhook?url=https://your-domain.com/webhook/{YOUR_SECRET}
    ```
-   where `<SECRET>` matches `TELEGRAM_WEBHOOK_SECRET`.
+   where `{YOUR_SECRET}` matches `TELEGRAM_WEBHOOK_SECRET`.
 
 ---
 

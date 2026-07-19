@@ -45,7 +45,7 @@ Run [`supabase.sql`](supabase.sql) once in the Supabase SQL editor to create all
 2. Set `ADMIN_CHAT_ID` to your personal or group chat ID.
 3. To receive inbound webhook calls, set `TELEGRAM_WEBHOOK_SECRET` and register the URL:
    ```
-   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/<SECRET>
+   https://api.telegram.org/bot{YOUR_TOKEN}/setWebhook?url=https://your-domain.com/webhook/{YOUR_SECRET}
    ```
 
 **Note:** Outbound notifications require only `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID`. `TELEGRAM_WEBHOOK_SECRET` is only for inbound webhook authentication.

@@ -22,20 +22,23 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Run lint
+      - name: Syntax check
         run: npm run lint
 
       - name: Run tests
         run: npm test
+
+      - name: Security audit
+        run: npm audit --audit-level=high
 
       - name: Verify server starts
         run: |
           node server.js &
           SERVER_PID=$!
           sleep 2
-          curl --fail http://localhost:3000/ || (kill $SERVER_PID && exit 1)
+          curl --fail http://localhost:3000/healthz || (kill $SERVER_PID && exit 1)
           kill $SERVER_PID
         env:
           PORT: 3000

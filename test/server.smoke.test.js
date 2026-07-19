@@ -202,3 +202,89 @@ test('game shell auth flow initializes persisted auth and protects submissions',
   assert.match(html, /bindAuthErrorClear\(\['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'\], 'registerError'\)/);
   assert.match(html, /initAuthState\(\);/);
 });
+
+test('GET /healthz returns 200 with uptime', async () => {
+  const port = 3110;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.ok(data.ok, 'ok field should be true');
+    assert.ok(typeof data.uptime === 'number', 'uptime should be a number');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /readyz returns 503 when database is not configured', async () => {
+  const port = 3111;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/readyz`);
+    // Without SUPABASE_URL/KEY the database check fails → 503
+    assert.equal(response.status, 503);
+    const data = await response.json();
+    assert.equal(data.ok, false);
+    assert.ok('database' in data.checks, 'checks.database should be present');
+    assert.ok('jwt' in data.checks, 'checks.jwt should be present');
+    assert.ok('telegram' in data.checks, 'checks.telegram should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/submit returns 400 when required fields are missing', async () => {
+  const port = 3112;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName: 'Test' })
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/submit returns 400 for invalid amount', async () => {
+  const port = 3113;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullName: 'Test', phone: '0911000000', ticketNumber: '1', amount: '-5' })
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /webhook/:secret returns 403 when secret does not match', async () => {
+  const port = 3114;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/webhook/wrong-secret`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: { chat: { id: 1 }, text: '/start' } })
+    });
+    assert.equal(response.status, 403);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+

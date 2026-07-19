@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "lint": "echo \"No lint step configured\" && exit 0",
+    "lint": "node --check server.js bot.js && node --check test/server.smoke.test.js",
     "test": "node --test"
   },
   "engines": {

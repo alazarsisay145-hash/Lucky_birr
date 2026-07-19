@@ -52,11 +52,15 @@ if (!WEBSITE_URL) {
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. Database features will not work.');
 }
-if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
-  console.warn('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
+// Only warn about Telegram when partially configured; fully absent = intentionally disabled.
+if (TELEGRAM_BOT_TOKEN && !ADMIN_CHAT_ID) {
+  console.warn('TELEGRAM_BOT_TOKEN is set but ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
 }
-if (!TELEGRAM_WEBHOOK_SECRET) {
-  console.warn('TELEGRAM_WEBHOOK_SECRET is missing. Webhook endpoint is disabled.');
+if (!TELEGRAM_BOT_TOKEN && ADMIN_CHAT_ID) {
+  console.warn('ADMIN_CHAT_ID is set but TELEGRAM_BOT_TOKEN is missing. Telegram notifications are disabled.');
+}
+if (TELEGRAM_WEBHOOK_SECRET && !TELEGRAM_BOT_TOKEN) {
+  console.warn('TELEGRAM_WEBHOOK_SECRET is set but TELEGRAM_BOT_TOKEN is missing. Webhook will reject all requests.');
 }
 if (!JWT_SECRET) {
   console.warn('JWT_SECRET is missing. Authentication will not work.');
@@ -147,14 +151,35 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, uptime: process.uptime() });
 });
 
-app.get('/readyz', (_req, res) => {
+app.get('/readyz', async (_req, res) => {
   const checks = {
-    database: Boolean(supabase),
+    database: false,
     jwt: Boolean(JWT_SECRET),
     telegram: Boolean(TELEGRAM_BOT_TOKEN && ADMIN_CHAT_ID)
   };
-  const ready = checks.database && checks.jwt;
-  res.status(ready ? 200 : 503).json({ ok: ready, checks });
+  const body = { ok: false, checks };
+
+  if (!supabase) {
+    body.detail = 'Supabase not configured – set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY';
+  } else {
+    try {
+      const { error } = await supabase.from('users').select('id').limit(1);
+      if (error) {
+        if (error.code === '42P01') {
+          body.detail = 'users table not found – run supabase.sql in the Supabase SQL Editor';
+        } else {
+          body.detail = `Database connectivity error (${error.code}) – verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY`;
+        }
+      } else {
+        checks.database = true;
+      }
+    } catch (e) {
+      body.detail = 'Database connectivity failed';
+    }
+  }
+
+  body.ok = checks.database && checks.jwt;
+  res.status(body.ok ? 200 : 503).json(body);
 });
 
 app.post('/webhook/:secret', async (req, res) => {
@@ -286,11 +311,19 @@ app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
       return res.status(500).json({ error: 'Database not configured' });
     }
 
-    const { data: existing } = await supabase
+    const { data: existing, error: lookupError } = await supabase
       .from('users')
       .select('id')
       .eq('email', email.toLowerCase())
       .maybeSingle();
+
+    if (lookupError) {
+      console.error('Supabase user lookup failed during register:', lookupError.code, lookupError.message);
+      if (lookupError.code === '42P01') {
+        return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
+      }
+      return res.status(500).json({ error: 'Registration service unavailable – database error' });
+    }
 
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
@@ -311,7 +344,11 @@ app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
       .single();
 
     if (insertError) {
-      return res.status(500).json({ error: 'Failed to create user' });
+      console.error('Supabase user insert failed:', insertError.code, insertError.message);
+      if (insertError.code === '42P01') {
+        return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
+      }
+      return res.status(500).json({ error: 'Failed to create user – database error' });
     }
 
     if (!JWT_SECRET) {
@@ -356,7 +393,15 @@ app.post('/api/auth/login', authRateLimit, async (req, res, next) => {
       .eq('email', email.toLowerCase())
       .maybeSingle();
 
-    if (error || !user) {
+    if (error) {
+      console.error('Supabase user lookup failed during login:', error.code, error.message);
+      if (error.code === '42P01') {
+        return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
+      }
+      return res.status(500).json({ error: 'Login service unavailable – database error' });
+    }
+
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 

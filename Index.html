@@ -974,6 +974,7 @@
 
         // ===== AUTH STATE =====
         const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
+        const AUTH_LOADING_OPACITY = '0.55';
         let AUTH_TOKEN = null;
         let currentUser = null;
 
@@ -996,7 +997,7 @@
         function setAuthButtonState(btn, isLoading, idleText, loadingText) {
             btn.disabled = isLoading;
             btn.textContent = isLoading ? loadingText : idleText;
-            btn.style.opacity = isLoading ? '0.55' : '';
+            btn.style.opacity = isLoading ? AUTH_LOADING_OPACITY : '';
             btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
         }
 
@@ -1013,7 +1014,7 @@
         }
 
         function getStoredAuthToken() {
-            return AUTH_TOKEN || localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
         }
 
         function getAuthErrorMessage(resp, data, fallback) {

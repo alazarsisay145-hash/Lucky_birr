@@ -187,9 +187,9 @@ test('game shell auth flow stores and restores AUTH_TOKEN', () => {
 test('game shell auth flow initializes persisted auth and protects submissions', () => {
   const html = readGameShell();
   assert.match(html, /async function initAuthState\(\)/);
-  assert.match(html, /fetch\('\/api\/auth\/login'/);
-  assert.match(html, /fetch\('\/api\/auth\/register'/);
-  assert.match(html, /fetch\('\/api\/auth\/me'/);
+  assert.match(html, /fetch\('\/api\/auth\/login',\s*\{\s*method: 'POST'/s);
+  assert.match(html, /fetch\('\/api\/auth\/register',\s*\{\s*method: 'POST'/s);
+  assert.match(html, /fetch\('\/api\/auth\/me',\s*\{\s*headers:/s);
   assert.match(html, /function getStoredAuthToken\(\)/);
   assert.match(html, /const token = getStoredAuthToken\(\)/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ token \}/);

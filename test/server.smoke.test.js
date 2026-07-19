@@ -417,13 +417,14 @@ test('API routes are not swallowed by SPA fallback', async () => {
 
 test('no Telegram warnings logged when Telegram is fully absent', async () => {
   const port = 3122;
-  const env = { ...process.env, PORT: String(port), NODE_ENV: 'test' };
-  delete env.TELEGRAM_BOT_TOKEN;
-  delete env.ADMIN_CHAT_ID;
-  delete env.TELEGRAM_WEBHOOK_SECRET;
-  env.TELEGRAM_BOT_TOKEN = '';
-  env.ADMIN_CHAT_ID = '';
-  env.TELEGRAM_WEBHOOK_SECRET = '';
+  const env = {
+    ...process.env,
+    PORT: String(port),
+    NODE_ENV: 'test',
+    TELEGRAM_BOT_TOKEN: '',
+    ADMIN_CHAT_ID: '',
+    TELEGRAM_WEBHOOK_SECRET: ''
+  };
   const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
     cwd: process.cwd(),
     env,

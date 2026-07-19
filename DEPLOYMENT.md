@@ -198,7 +198,7 @@ If you are running without Telegram (admin panel only):
    | `WEBSITE_URL` | `https://your-service.onrender.com` |
    | `ADMIN_EMAILS` | Exact email(s) that will have admin access, comma-separated |
 
-2. **Do not set** `TELEGRAM_BOT_TOKEN`, `ADMIN_CHAT_ID`, or `TELEGRAM_WEBHOOK_SECRET`. Leaving them absent suppresses Telegram-related log warnings. No alarming warnings appear at startup when Telegram is fully absent.
+2. **Do not set** `TELEGRAM_BOT_TOKEN`, `ADMIN_CHAT_ID`, or `TELEGRAM_WEBHOOK_SECRET`. When all three Telegram variables are unset, no Telegram-related warnings will be logged at startup.
 
 3. **Register with the exact email listed in `ADMIN_EMAILS`** (matching is case-insensitive and trims whitespace). After registering, log in – the Admin panel button appears automatically.
 

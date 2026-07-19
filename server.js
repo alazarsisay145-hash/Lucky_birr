@@ -174,7 +174,7 @@ app.get('/readyz', async (_req, res) => {
         checks.database = true;
       }
     } catch (e) {
-      body.detail = 'Database connectivity failed';
+      body.detail = `Database connectivity failed: ${e.message}`;
     }
   }
 

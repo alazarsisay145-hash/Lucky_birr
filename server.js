@@ -678,8 +678,8 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`Lucky Birr server listening on port ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Lucky Birr server listening on 0.0.0.0:${PORT}`);
 });
 
 process.on('SIGTERM', () => {

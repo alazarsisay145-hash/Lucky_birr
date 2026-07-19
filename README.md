@@ -87,10 +87,18 @@ The container runs as a non-root user and uses `npm ci` for deterministic depend
 
 GitHub Actions runs on every push/PR: `npm ci` → syntax lint → tests → `npm audit --audit-level=high` → server smoke test → Docker build.
 
-## GitHub Pages
+## Deployment
 
-The static game shell (`Index.html`) is deployed to GitHub Pages via `.github/workflows/pages.yml`.
+Lucky Birr is a full-stack Express application. It **cannot be hosted on GitHub Pages** (or any static host) because it requires a running Node.js server for authentication, submissions, and API routes.
 
-1. Go to **Repository Settings → Pages → Source: GitHub Actions**
-2. Push to `main` or run the workflow manually
-3. Open: `https://alazarsisay145-hash.github.io/Lucky_birr/`
+Deploy to **Render** using the included `render.yaml` Blueprint:
+
+1. Push this repository to GitHub.
+2. Go to [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint** → connect this repo.
+3. Render creates a **Web Service** with `npm ci`, `npm start`, and `/healthz` health checks pre-configured.
+4. Set the required environment variables in the Render dashboard (see table above and `render.yaml` comments).
+5. After the first deploy completes, copy your Render service URL (e.g. `https://lucky-birr.onrender.com`) and set it as `WEBSITE_URL` in the Render environment, then **redeploy**.
+6. Verify: `GET https://your-service.onrender.com/healthz` → `{"ok":true}` and `/readyz` → `{"ok":true}`.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for full step-by-step instructions including Supabase setup.
+

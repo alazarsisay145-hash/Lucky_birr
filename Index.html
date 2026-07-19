@@ -565,6 +565,11 @@
         .auth-link { text-align: center; font-size: 13px; color: var(--text2); margin-top: 12px; }
         .auth-link a { color: var(--accent); cursor: pointer; font-weight: 600; }
 
+        .auth-note {
+            margin: 14px auto 0; max-width: 360px; text-align: center;
+            font-size: 12px; line-height: 1.5; color: var(--text2);
+        }
+
         .auth-error {
             color: #fca5a5;
             font-size: 12px;
@@ -573,6 +578,15 @@
             padding: 10px 12px; border-radius: 8px; display: none;
         }
         .auth-error.show { display: block; }
+
+        .auth-setup-status {
+            margin: 12px auto 0; max-width: 360px;
+            color: #fde68a; font-size: 12px; line-height: 1.5;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            padding: 10px 12px; border-radius: 10px; display: none;
+        }
+        .auth-setup-status.show { display: block; }
 
         .auth-screen { display: none; }
         .auth-screen.active { display: block; }
@@ -602,6 +616,8 @@
             <h2>🎰 LUCKY BIRR</h2>
             <p>Live Draw • Instant Win</p>
         </div>
+        <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL and appears after signing in with a configured admin email.</div>
+        <div class="auth-setup-status" id="authSetupStatus"></div>
 
         <!-- Login Screen -->
         <div class="auth-screen active" id="screenLoginAuth">
@@ -1055,7 +1071,43 @@
         function showAuthOverlay() {
             document.getElementById('authOverlay').classList.remove('hidden');
             showLoginScreen();
+            loadAuthSetupStatus();
             checkSendReady();
+        }
+
+        function setAuthSetupStatus(message) {
+            const el = document.getElementById('authSetupStatus');
+            el.textContent = message;
+            el.classList.toggle('show', !!message);
+        }
+
+        async function loadAuthSetupStatus() {
+            try {
+                const resp = await fetch('/readyz', { cache: 'no-store' });
+                const data = await readJsonResponse(resp, 'Ready status');
+                if (resp.ok || !data || typeof data !== 'object') {
+                    setAuthSetupStatus('');
+                    return;
+                }
+                const blockers = [];
+                if (data.checks && data.checks.database === false) {
+                    blockers.push('database setup is incomplete');
+                }
+                if (data.checks && data.checks.jwt === false) {
+                    blockers.push('server authentication is not configured');
+                }
+                if (blockers.length > 0) {
+                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${blockers.join(' and ')}.`);
+                    return;
+                }
+                if (typeof data.detail === 'string' && data.detail.trim()) {
+                    setAuthSetupStatus(data.detail.trim());
+                    return;
+                }
+                setAuthSetupStatus('');
+            } catch (_error) {
+                setAuthSetupStatus('');
+            }
         }
 
         function bindAuthErrorClear(inputIds, errorId) {
@@ -1160,6 +1212,7 @@
 
         function onAuthSuccess() {
             document.getElementById('authOverlay').classList.add('hidden');
+            setAuthSetupStatus('');
             // Show user info in header
             const name = currentUser.fullName || currentUser.email || 'Player';
             document.getElementById('headerUserName').textContent = name.split(' ')[0];

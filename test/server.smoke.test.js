@@ -192,11 +192,13 @@ test('game shell auth flow stores and restores AUTH_TOKEN', () => {
 
 test('game shell auth flow initializes persisted auth and protects submissions', () => {
   const html = compactHtml(readGameShell());
+  assert.match(html, /Admin access has no separate URL and appears after signing in with a configured admin email/);
   assert.match(html, /async function initAuthState\(\)/);
   assert.match(html, /function getPersistedAuthToken\(\)/);
   assert.match(html, /fetch\('\/api\/auth\/login', \{ method: 'POST'/);
   assert.match(html, /fetch\('\/api\/auth\/register', \{ method: 'POST'/);
   assert.match(html, /fetch\('\/api\/auth\/me', \{ headers:/);
+  assert.match(html, /fetch\('\/readyz', \{ cache: 'no-store' \}\)/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ AUTH_TOKEN \}/);
   assert.match(html, /bindAuthErrorClear\(\['loginEmail', 'loginPassword'\], 'loginError'\)/);
   assert.match(html, /bindAuthErrorClear\(\['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'\], 'registerError'\)/);

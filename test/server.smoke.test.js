@@ -413,4 +413,120 @@ test('API routes are not swallowed by SPA fallback', async () => {
   }
 });
 
+// ===== TELEGRAM-DISABLED & ADMIN-EMAIL TESTS =====
 
+test('no Telegram warnings logged when Telegram is fully absent', async () => {
+  const port = 3122;
+  const env = {
+    ...process.env,
+    PORT: String(port),
+    NODE_ENV: 'test',
+    TELEGRAM_BOT_TOKEN: '',
+    ADMIN_CHAT_ID: '',
+    TELEGRAM_WEBHOOK_SECRET: ''
+  };
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let stderr = '';
+  server.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  try {
+    await wait(1200);
+    assert.doesNotMatch(
+      stderr,
+      /TELEGRAM_BOT_TOKEN|ADMIN_CHAT_ID|TELEGRAM_WEBHOOK_SECRET/i,
+      'should not emit Telegram warnings when Telegram is fully absent'
+    );
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('partial Telegram config warns when TOKEN is set but ADMIN_CHAT_ID is missing', async () => {
+  const port = 3123;
+  const env = {
+    ...process.env,
+    PORT: String(port),
+    NODE_ENV: 'test',
+    TELEGRAM_BOT_TOKEN: 'fake-token-for-test',
+    ADMIN_CHAT_ID: '',
+    TELEGRAM_WEBHOOK_SECRET: ''
+  };
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let stderr = '';
+  server.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  try {
+    await wait(1200);
+    assert.match(
+      stderr,
+      /ADMIN_CHAT_ID/i,
+      'should warn about missing ADMIN_CHAT_ID when TELEGRAM_BOT_TOKEN is set'
+    );
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('ADMIN_EMAILS matching is case-insensitive and trimmed', async () => {
+  const port = 3124;
+  const jwtSecret = 'test-jwt-secret-32-chars-exactly!!';
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NODE_ENV: 'test',
+      ADMIN_EMAILS: '  test@example.com , another@example.com  ',
+      JWT_SECRET: jwtSecret
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  try {
+    await wait(1200);
+    const jwt = require('jsonwebtoken');
+    // Sign token with uppercase email – should still pass the admin check
+    const token = jwt.sign({ id: 'test-id', email: 'TEST@EXAMPLE.COM' }, jwtSecret, { expiresIn: '1h' });
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/submissions`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    // Admin check passes (email matched case-insensitively), DB not configured → 500
+    assert.notEqual(response.status, 403, 'uppercase email must be recognized as admin (case-insensitive match)');
+    assert.equal(response.status, 500, 'should fail with DB error rather than admin rejection');
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('GET /readyz includes detail field when Supabase is not configured', async () => {
+  const port = 3125;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/readyz`);
+    assert.equal(response.status, 503);
+    const data = await response.json();
+    assert.equal(data.ok, false);
+    assert.ok(typeof data.detail === 'string', 'readyz must include a detail field when Supabase is not configured');
+    assert.match(data.detail, /SUPABASE_URL/i, 'detail should mention the missing env var');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});

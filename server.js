@@ -35,24 +35,56 @@ const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'screenshots';
-const WEBSITE_URL = process.env.WEBSITE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+// Normalize WEBSITE_URL: strip trailing slash(es), validate format.
+const WEBSITE_URL = (() => {
+  // Strip one or more trailing slashes – handles copy-paste from browser address bars.
+  const raw = (process.env.WEBSITE_URL || '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    console.warn(
+      'WEBSITE_URL is not set. CORS will only allow requests without an Origin header.' +
+      ' Set WEBSITE_URL to your deployed service URL (e.g. https://lucky-birr.onrender.com) in your deployment environment variables.'
+    );
+    return '';
+  }
+  try {
+    const parsed = new URL(raw);
+    if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+      console.warn(
+        `WEBSITE_URL "${raw}" uses ${parsed.protocol} instead of https:. ` +
+        'In production, CORS must only allow HTTPS origins to prevent mixed-content and eavesdropping attacks. ' +
+        'Update WEBSITE_URL to an https:// URL.'
+      );
+    }
+    // Return parsed.origin (protocol + host + port) – the normalized canonical
+    // form that browsers send as the Origin header; any path or trailing slash is excluded.
+    return parsed.origin;
+  } catch {
+    console.warn(
+      `WEBSITE_URL "${raw}" is not a valid URL. CORS will only allow requests without an Origin header.` +
+      ' Update WEBSITE_URL to a valid deployed service URL (e.g. https://lucky-birr.onrender.com) in your deployment environment variables.'
+    );
+    return '';
+  }
+})();
+
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   : null;
 
-if (!WEBSITE_URL) {
-  console.warn('WEBSITE_URL is not set. CORS will only allow requests without an Origin header.');
-}
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. Database features will not work.');
 }
-if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
+if (TELEGRAM_BOT_TOKEN && !ADMIN_CHAT_ID) {
+  console.warn('TELEGRAM_BOT_TOKEN is set but ADMIN_CHAT_ID is missing. Telegram notifications are disabled. Set ADMIN_CHAT_ID to your Telegram chat/user ID.');
+} else if (!TELEGRAM_BOT_TOKEN && ADMIN_CHAT_ID) {
+  console.warn('ADMIN_CHAT_ID is set but TELEGRAM_BOT_TOKEN is missing. Telegram notifications are disabled. Set TELEGRAM_BOT_TOKEN to your bot token from @BotFather.');
+} else if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
   console.warn('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID is missing. Telegram notifications are disabled.');
 }
 if (!TELEGRAM_WEBHOOK_SECRET) {

@@ -27,11 +27,13 @@ See [`.env.example`](.env.example) for full documentation. Key required variable
 | `JWT_SECRET` | **Yes** | Min 32-char random secret for JWT signing |
 | `SUPABASE_URL` | **Yes** | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Supabase service role key (server-side only) |
-| `WEBSITE_URL` | Prod | Public URL for CORS (`https://your-domain.com`) |
+| `WEBSITE_URL` | Prod | Public HTTPS URL for CORS, no trailing slash (e.g. `https://lucky-birr.onrender.com`) |
 | `ADMIN_EMAILS` | Prod | Comma-separated admin emails |
-| `TELEGRAM_BOT_TOKEN` | Optional | Enables outbound admin notifications |
-| `ADMIN_CHAT_ID` | Optional | Telegram chat ID for notifications |
-| `TELEGRAM_WEBHOOK_SECRET` | Optional | Enables inbound webhook endpoint |
+| `TELEGRAM_BOT_TOKEN` | Optional | Enables outbound admin notifications (both this and `ADMIN_CHAT_ID` required) |
+| `ADMIN_CHAT_ID` | Optional | Telegram chat ID for notifications (both this and `TELEGRAM_BOT_TOKEN` required) |
+| `TELEGRAM_WEBHOOK_SECRET` | Optional | Enables inbound `/webhook/:secret` endpoint |
+
+> **Startup diagnostics:** The server emits actionable `console.warn` messages at startup for every missing or misconfigured variable. Check your Render logs if a feature is not working.
 
 ## Supabase Setup
 
@@ -43,7 +45,7 @@ Run [`supabase.sql`](supabase.sql) once in the Supabase SQL editor to create all
 2. Set `ADMIN_CHAT_ID` to your personal or group chat ID.
 3. To receive inbound webhook calls, set `TELEGRAM_WEBHOOK_SECRET` and register the URL:
    ```
-   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/<SECRET>
+   https://api.telegram.org/bot{YOUR_TOKEN}/setWebhook?url=https://your-domain.com/webhook/{YOUR_SECRET}
    ```
 
 **Note:** Outbound notifications require only `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID`. `TELEGRAM_WEBHOOK_SECRET` is only for inbound webhook authentication.

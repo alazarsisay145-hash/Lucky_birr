@@ -117,10 +117,7 @@ const submitRateLimit = rateLimit({
  * PGRST205 that Supabase may return instead.
  */
 function isMissingTableError(error) {
-  if (!error) return false;
-  if (error.code === '42P01') return true;
-  if (error.code === 'PGRST205') return true;
-  return false;
+  return Boolean(error && (error.code === '42P01' || error.code === 'PGRST205'));
 }
 
 function verifyJWT(req, res, next) {

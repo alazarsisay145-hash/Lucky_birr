@@ -558,5 +558,5 @@ test('server.js isMissingTableError helper recognizes PGRST205 alongside 42P01',
   const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(src, /isMissingTableError/, 'isMissingTableError helper must be defined');
   assert.match(src, /'42P01'/, 'helper must recognise PostgreSQL 42P01');
-  assert.match(src, /'PGRST205'/, 'helper must recognise PostgREST PGRST205');
+  assert.match(src, /'PGRST205'/, 'helper must recognize PostgREST PGRST205');
 });

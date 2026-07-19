@@ -616,7 +616,7 @@
             <h2>🎰 LUCKY BIRR</h2>
             <p>Live Draw • Instant Win</p>
         </div>
-        <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL and appears after signing in with a configured admin email.</div>
+        <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL. It appears after signing in with a configured admin email.</div>
         <div class="auth-setup-status" id="authSetupStatus"></div>
 
         <!-- Login Screen -->
@@ -1081,12 +1081,22 @@
             el.classList.toggle('show', !!message);
         }
 
+        function formatBlockerList(items) {
+            if (items.length <= 1) return items[0] || '';
+            if (items.length === 2) return `${items[0]} and ${items[1]}`;
+            return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+        }
+
         async function loadAuthSetupStatus() {
             try {
                 const resp = await fetch('/readyz', { cache: 'no-store' });
                 const data = await readJsonResponse(resp, 'Ready status');
-                if (resp.ok || !data || typeof data !== 'object') {
+                if (resp.ok) {
                     setAuthSetupStatus('');
+                    return;
+                }
+                if (!data || typeof data !== 'object') {
+                    setAuthSetupStatus('Registration and sign-in are temporarily unavailable.');
                     return;
                 }
                 const blockers = [];
@@ -1097,7 +1107,7 @@
                     blockers.push('server authentication is not configured');
                 }
                 if (blockers.length > 0) {
-                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${blockers.join(' and ')}.`);
+                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}.`);
                     return;
                 }
                 if (typeof data.detail === 'string' && data.detail.trim()) {

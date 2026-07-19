@@ -2,15 +2,15 @@
 
 ## Overview
 
-Lucky Birr is a Telegram Mini App raffle interface served as a static HTML file via a Node.js HTTP server.
+Lucky Birr is a Telegram Mini App raffle interface served by a Node.js/Express API with Supabase persistence and optional Telegram notifications.
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+
-- A Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
-- A publicly accessible HTTPS URL for the Mini App
+- Node.js 22 (`node -v` should show `v22.x`)
+- Supabase project with SQL schema applied (see [supabase.sql](supabase.sql))
+- A Telegram Bot Token (optional, for admin notifications)
 
 ---
 
@@ -21,29 +21,62 @@ Lucky Birr is a Telegram Mini App raffle interface served as a static HTML file 
 git clone https://github.com/alazarsisay145-hash/Lucky_birr.git
 cd Lucky_birr
 
-# 2. Install dependencies
-npm install
+# 2. Install dependencies (deterministic)
+npm ci
 
 # 3. Copy and configure environment variables
 cp .env.example .env
-# Edit .env and fill in BOT_TOKEN, WEBAPP_URL, etc.
+# Edit .env – at minimum set JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 # 4. Start the server
 npm start
-# App available at http://localhost:3000
+# App available at http://localhost:10000
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable              | Required | Description                                  |
-|-----------------------|----------|----------------------------------------------|
-| `PORT`                | No       | HTTP port (default: `3000`)                  |
-| `BOT_TOKEN`           | Yes      | Telegram bot token from @BotFather           |
-| `WEBAPP_URL`          | Yes      | Public HTTPS URL of the hosted Mini App      |
-| `ADMIN_TELEGRAM_ID`   | No       | Telegram user ID allowed to use admin panel  |
-| `NODE_ENV`            | No       | Set to `production` in production            |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET` | **Yes** | — | Min 32-char random secret for JWT signing |
+| `SUPABASE_URL` | **Yes** | — | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | — | Supabase service role key (server-side only, never expose to clients) |
+| `WEBSITE_URL` | **Prod** | — | Public HTTPS URL for CORS (e.g. `https://lucky-birr.onrender.com`) |
+| `ADMIN_EMAILS` | Prod | — | Comma-separated admin email addresses |
+| `PORT` | No | `10000` | HTTP port |
+| `NODE_ENV` | No | `development` | Set to `production` in production |
+| `SUPABASE_BUCKET` | No | `screenshots` | Supabase storage bucket name |
+| `TELEGRAM_BOT_TOKEN` | No | — | Telegram bot token – enables outbound admin notifications |
+| `ADMIN_CHAT_ID` | No | — | Telegram chat/user ID for notifications |
+| `TELEGRAM_WEBHOOK_SECRET` | No | — | Secret path segment – enables inbound webhook endpoint |
+
+> **Note:** `TELEGRAM_WEBHOOK_SECRET` is only required for the inbound `/webhook/:secret` endpoint. It is **not** required for outbound admin notifications (those only need `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID`).
+
+---
+
+## Supabase Setup
+
+1. Open your Supabase project → SQL editor.
+2. Run the contents of [`supabase.sql`](supabase.sql) (idempotent – safe to re-run).
+3. Create the storage bucket:
+   ```sql
+   insert into storage.buckets (id, name, public) values ('screenshots', 'screenshots', true)
+   on conflict do nothing;
+   ```
+4. (Recommended) Enable Row Level Security and add policies per the comments in `supabase.sql`.
+
+---
+
+## Telegram Setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) → copy the token to `TELEGRAM_BOT_TOKEN`.
+2. Set `ADMIN_CHAT_ID` to your Telegram user or group chat ID.
+3. Optional – enable inbound webhook:
+   ```
+   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/<SECRET>
+   ```
+   where `<SECRET>` matches `TELEGRAM_WEBHOOK_SECRET`.
 
 ---
 
@@ -56,64 +89,88 @@ docker build -t lucky-birr .
 # Run the container
 docker run -d \
   --name lucky-birr \
-  -p 3000:3000 \
-  -e BOT_TOKEN=your-bot-token \
-  -e WEBAPP_URL=https://your-domain.com \
-  -e NODE_ENV=production \
+  -p 10000:10000 \
+  --env-file .env \
   lucky-birr
+
+# Check health
+docker inspect --format='{{.State.Health.Status}}' lucky-birr
 ```
 
----
-
-## Production Deployment (Generic)
-
-1. **Set environment variables** using your platform's secret/env management (never commit `.env` to git).
-2. **Run `npm start`** – or use the provided Dockerfile.
-3. **Point your Telegram Bot** to the `WEBAPP_URL` via BotFather → Edit Bot → Edit Menu Button.
-4. **Use HTTPS** – Telegram Mini Apps require HTTPS. Use a reverse proxy (nginx, Caddy) or a platform like Railway/Render/Fly.io.
-
-### Recommended platforms
-
-| Platform  | Notes                              |
-|-----------|------------------------------------|
-| Railway   | Detects Node.js automatically      |
-| Render    | Free tier available, supports env  |
-| Fly.io    | Uses Dockerfile, global edge       |
-| VPS + PM2 | `pm2 start server.js --name lucky-birr` |
+The Dockerfile:
+- Uses `node:22-alpine`
+- Installs only production dependencies via `npm ci`
+- Runs as a non-root user
+- Exposes port 10000 (matches default `PORT`)
+- Includes a `HEALTHCHECK` against `/healthz`
 
 ---
 
-## Health Check
+## Health and Readiness Endpoints
 
-Once running, verify the server responds:
+| Endpoint | Purpose | Success |
+|---|---|---|
+| `GET /healthz` | Process liveness | `200 { ok: true, uptime: N }` |
+| `GET /readyz` | Dependency readiness (DB + JWT) | `200 { ok: true, checks: {...} }` |
 
-```bash
-curl -I http://localhost:3000/
-# Expected: HTTP/1.1 200 OK
-```
+Use `/readyz` in your load balancer/orchestrator readiness probe. It returns `503` if the database or JWT secret is not configured.
 
 ---
 
-## Runbook
+## Production Deployment Checklist
 
-### Server not starting
-- Check `PORT` is not already in use: `lsof -i :3000`
-- Ensure Node.js 18+ is installed: `node --version`
+- [ ] Set all **required** environment variables
+- [ ] `JWT_SECRET` is cryptographically random (≥ 32 characters)
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` is only in the server environment, never in client code
+- [ ] `WEBSITE_URL` exactly matches your public HTTPS URL
+- [ ] `supabase.sql` has been applied in Supabase
+- [ ] Storage bucket `screenshots` created in Supabase
+- [ ] `GET /readyz` returns `200 ok:true` before routing live traffic
+- [ ] `npm audit --audit-level=high` reports zero findings
+- [ ] Node.js 22 is installed on the deployment target
 
-### Telegram Mini App not loading
-- Confirm `WEBAPP_URL` is publicly accessible over HTTPS
-- Verify the bot's menu button or inline keyboard points to the correct URL
+---
 
-### Container won't start
+## Rollback
+
+1. Identify the previous working image tag or git ref.
+2. Deploy the previous image/release.
+3. No database migration is needed for app-only rollbacks (schema changes are additive and idempotent).
+4. Verify `GET /readyz` returns `200` after rollback.
+
+---
+
+## Operations
+
+### Logs
+- Structured request logs via `morgan` (format: `tiny` in production, `dev` locally).
+- Errors logged to stderr with `console.error`.
+- Use your platform's log aggregation (Render Logs, Fly.io `fly logs`, `docker logs`, etc.).
+
+### Backups
+- Enable Supabase Point-in-Time Recovery (PITR) in the Supabase dashboard.
+- For free-tier projects, periodically export data via the Supabase table editor.
+
+### Secret Rotation
+- `JWT_SECRET`: update the env var and restart. All existing tokens are immediately invalidated; users must log in again.
+- `SUPABASE_SERVICE_ROLE_KEY`: rotate in Supabase dashboard → update env var → restart.
+- `TELEGRAM_BOT_TOKEN`: generate a new token via BotFather → update env var → re-register webhook URL.
+
+### Runbook
+
+**Server not starting**
+- Check port conflicts: `lsof -i :10000`
+- Ensure Node.js 22 is installed: `node --version`
+- Verify required env vars are set
+
+**`GET /readyz` returns 503**
+- Check `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `JWT_SECRET` are set
+- Test Supabase connectivity independently
+
+**Telegram notifications not sending**
+- Verify `TELEGRAM_BOT_TOKEN` and `ADMIN_CHAT_ID` are set (webhook secret is **not** required for notifications)
+- Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`
+
+**Container won't start**
 - Check logs: `docker logs lucky-birr`
-- Ensure `BOT_TOKEN` and `WEBAPP_URL` env vars are set
-
----
-
-## CI/CD
-
-The `.github/workflows/ci.yml` workflow:
-- Runs on every push and pull request to `main`/`master`
-- Installs dependencies, runs lint and tests
-- Verifies the server starts and responds on port 3000
-- Builds the Docker image to catch container errors early
+- Confirm all required env vars are provided to `docker run`

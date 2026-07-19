@@ -79,7 +79,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use(
   rateLimit({
@@ -96,6 +96,14 @@ const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' }
+});
+
+const submitRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many submissions, please try again later.' }
 });
 
 function verifyJWT(req, res, next) {
@@ -139,6 +147,16 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, uptime: process.uptime() });
 });
 
+app.get('/readyz', (_req, res) => {
+  const checks = {
+    database: Boolean(supabase),
+    jwt: Boolean(JWT_SECRET),
+    telegram: Boolean(TELEGRAM_BOT_TOKEN && ADMIN_CHAT_ID)
+  };
+  const ready = checks.database && checks.jwt;
+  res.status(ready ? 200 : 503).json({ ok: ready, checks });
+});
+
 app.post('/webhook/:secret', async (req, res) => {
   if (!TELEGRAM_WEBHOOK_SECRET || req.params.secret !== TELEGRAM_WEBHOOK_SECRET) {
     return res.sendStatus(403);
@@ -161,7 +179,7 @@ app.post('/webhook/:secret', async (req, res) => {
   }
 });
 
-app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
+app.post('/api/submit', submitRateLimit, upload.single('screenshot'), async (req, res, next) => {
   try {
     const { fullName, phone, ticketNumber, amount } = req.body;
 
@@ -175,9 +193,7 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
     }
 
     if (!supabase) {
-      return res.status(500).json({
-        error: 'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
-      });
+      return res.status(503).json({ error: 'Service temporarily unavailable' });
     }
 
     let screenshotUrl = null;
@@ -196,9 +212,7 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
 
       if (uploadError) {
         console.warn('Supabase storage upload failed:', uploadError.message);
-        return res.status(502).json({
-          error: `Failed to upload screenshot to bucket "${SUPABASE_BUCKET}". ${uploadError.message}`
-        });
+        return res.status(502).json({ error: 'Failed to upload screenshot. Please try again.' });
       }
 
       const { data: publicUrlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
@@ -222,9 +236,12 @@ app.post('/api/submit', upload.single('screenshot'), async (req, res, next) => {
 
     if (insertError) {
       console.warn('Supabase submission insert failed:', insertError.message);
-      return res.status(500).json({
-        error: `Failed to save submission for approval. ${insertError.message}`
-      });
+      if (screenshotPath) {
+        supabase.storage.from(SUPABASE_BUCKET).remove([screenshotPath]).catch((e) => {
+          console.warn('Failed to remove orphaned upload:', e.message);
+        });
+      }
+      return res.status(500).json({ error: 'Failed to save submission. Please try again.' });
     }
 
     const details =
@@ -412,7 +429,7 @@ app.post('/api/auth/logout', verifyJWT, (_req, res) => {
 
 // ===== SUBMISSIONS (JWT-protected) =====
 
-app.post('/api/submissions', verifyJWT, upload.single('screenshot'), async (req, res, next) => {
+app.post('/api/submissions', verifyJWT, submitRateLimit, upload.single('screenshot'), async (req, res, next) => {
   try {
     const { ticketNumber, tier, amount, paymentMethod } = req.body;
 
@@ -422,7 +439,7 @@ app.post('/api/submissions', verifyJWT, upload.single('screenshot'), async (req,
     }
 
     if (!supabase) {
-      return res.status(500).json({ error: 'Database not configured' });
+      return res.status(503).json({ error: 'Service temporarily unavailable' });
     }
 
     let screenshotUrl = null;
@@ -440,9 +457,8 @@ app.post('/api/submissions', verifyJWT, upload.single('screenshot'), async (req,
         });
 
       if (uploadError) {
-        return res.status(502).json({
-          error: `Screenshot upload failed: ${uploadError.message}`
-        });
+        console.warn('Screenshot upload failed:', uploadError.message);
+        return res.status(502).json({ error: 'Failed to upload screenshot. Please try again.' });
       }
 
       const { data: publicUrlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
@@ -472,7 +488,13 @@ app.post('/api/submissions', verifyJWT, upload.single('screenshot'), async (req,
       .single();
 
     if (insertError) {
-      return res.status(500).json({ error: `Failed to save submission: ${insertError.message}` });
+      console.warn('Submission insert failed:', insertError.message);
+      if (screenshotPath) {
+        supabase.storage.from(SUPABASE_BUCKET).remove([screenshotPath]).catch((e) => {
+          console.warn('Failed to remove orphaned upload:', e.message);
+        });
+      }
+      return res.status(500).json({ error: 'Failed to save submission. Please try again.' });
     }
 
     const userName = userRecord?.full_name || userRecord?.email || 'Unknown';
@@ -520,7 +542,8 @@ app.get('/api/admin/submissions', verifyJWT, requireAdmin, async (req, res, next
       .range(offset, offset + limit - 1);
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      console.warn('Admin submissions query failed:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch submissions' });
     }
 
     return res.json({ ok: true, submissions: submissions || [], total: count || 0, page });
@@ -557,9 +580,9 @@ app.post('/api/admin/submissions/:id/approve', verifyJWT, requireAdmin, async (r
       .eq('id', id);
 
     if (updateError) {
-      return res.status(500).json({ error: updateError.message });
+      console.warn('Submission approve failed:', updateError.message);
+      return res.status(500).json({ error: 'Failed to approve submission' });
     }
-
     const userName = submission.users?.full_name || submission.users?.email || 'Unknown';
     const details =
       `✅ Submission #${id} APPROVED\n` +
@@ -588,7 +611,8 @@ app.post('/api/admin/submissions/:id/reject', verifyJWT, requireAdmin, async (re
       .eq('id', id);
 
     if (updateError) {
-      return res.status(500).json({ error: updateError.message });
+      console.warn('Submission reject failed:', updateError.message);
+      return res.status(500).json({ error: 'Failed to reject submission' });
     }
 
     return res.json({ ok: true, message: 'Submission rejected' });
@@ -608,7 +632,8 @@ app.get('/api/admin/stats', verifyJWT, requireAdmin, async (req, res, next) => {
       .select('status, amount');
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      console.warn('Admin stats query failed:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch stats' });
     }
 
     const approved = stats?.filter((s) => s.status === 'approved') || [];
@@ -665,6 +690,16 @@ process.on('SIGINT', () => {
   server.close(() => process.exit(0));
 });
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+  process.exit(1);
+});
+
 function mimeToExtension(mime) {
   if (mime === 'image/png') return 'png';
   if (mime === 'image/jpeg') return 'jpeg';
@@ -674,7 +709,7 @@ function mimeToExtension(mime) {
 }
 
 async function notifyAdmin(details, screenshotUrl) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WEBHOOK_SECRET || !ADMIN_CHAT_ID) {
+  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) {
     return false;
   }
 

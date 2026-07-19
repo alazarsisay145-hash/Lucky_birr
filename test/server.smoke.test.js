@@ -32,6 +32,10 @@ function readGameShell() {
   return fs.readFileSync(path.join(__dirname, '..', 'Index.html'), 'utf8');
 }
 
+function compactHtml(source) {
+  return source.replace(/\s+/g, ' ').trim();
+}
+
 test('server serves the game shell', async () => {
   const port = 3101;
   const { server, getStderr } = spawnServer(port);
@@ -185,13 +189,11 @@ test('game shell auth flow stores and restores AUTH_TOKEN', () => {
 });
 
 test('game shell auth flow initializes persisted auth and protects submissions', () => {
-  const html = readGameShell();
+  const html = compactHtml(readGameShell());
   assert.match(html, /async function initAuthState\(\)/);
-  assert.match(html, /fetch\('\/api\/auth\/login',\s*\{\s*method: 'POST'/s);
-  assert.match(html, /fetch\('\/api\/auth\/register',\s*\{\s*method: 'POST'/s);
-  assert.match(html, /fetch\('\/api\/auth\/me',\s*\{\s*headers:/s);
-  assert.match(html, /function getStoredAuthToken\(\)/);
-  assert.match(html, /const token = getStoredAuthToken\(\)/);
-  assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ token \}/);
+  assert.match(html, /fetch\('\/api\/auth\/login', \{ method: 'POST'/);
+  assert.match(html, /fetch\('\/api\/auth\/register', \{ method: 'POST'/);
+  assert.match(html, /fetch\('\/api\/auth\/me', \{ headers:/);
+  assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ AUTH_TOKEN \}/);
   assert.match(html, /initAuthState\(\);/);
 });

@@ -998,7 +998,11 @@
             btn.disabled = isLoading;
             btn.textContent = isLoading ? loadingText : idleText;
             btn.style.opacity = isLoading ? AUTH_LOADING_OPACITY : '';
-            btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+            if (isLoading) {
+                btn.setAttribute('aria-busy', 'true');
+            } else {
+                btn.removeAttribute('aria-busy');
+            }
         }
 
         function saveAuthSession(token, user) {
@@ -1013,10 +1017,6 @@
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
         }
 
-        function getStoredAuthToken() {
-            return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-        }
-
         function getAuthErrorMessage(resp, data, fallback) {
             if (data && typeof data.error === 'string' && data.error.trim()) {
                 return data.error;
@@ -1024,6 +1024,15 @@
             if (resp.status === 400) return fallback;
             if (resp.status === 401) return 'Invalid email or password';
             return 'Something went wrong. Please try again.';
+        }
+
+        async function readJsonResponse(resp, context) {
+            try {
+                return await resp.json();
+            } catch (error) {
+                console.error(context + ' returned invalid JSON:', error);
+                return null;
+            }
         }
 
         function showAuthOverlay() {
@@ -1065,8 +1074,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
-                const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.ok && data.token && data.user) {
+                const data = await readJsonResponse(resp, 'Login response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
@@ -1110,8 +1119,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, phone, password, fullName })
                 });
-                const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.ok && data.token && data.user) {
+                const data = await readJsonResponse(resp, 'Register response');
+                if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
@@ -1182,8 +1191,8 @@
                 const resp = await fetch('/api/auth/me', {
                     headers: { 'Authorization': 'Bearer ' + stored }
                 });
-                const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.ok && data.user) {
+                const data = await readJsonResponse(resp, 'Auth restore response');
+                if (resp.ok && data && data.ok && data.user) {
                     saveAuthSession(stored, data.user);
                     onAuthSuccess();
                 } else {
@@ -1621,13 +1630,12 @@
         async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
             const tier = TIERS[currentTier];
-            const token = getStoredAuthToken();
             if (!screenshotFile || !amount) {
                 playSound('error');
                 showToast('Please upload screenshot and enter amount');
                 return;
             }
-            if (!token || !currentUser) {
+            if (!AUTH_TOKEN || !currentUser) {
                 playSound('error');
                 showToast('Please sign in to submit');
                 showAuthOverlay();
@@ -1646,11 +1654,11 @@
 
                 const resp = await fetch('/api/submissions', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + token },
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
                     body: formData
                 });
-                const data = await resp.json();
-                if (data.ok) {
+                const data = await readJsonResponse(resp, 'Submission response');
+                if (data && data.ok) {
                     playSound('sold');
                     showToast('📨 Sent to admin! Waiting for confirmation...');
                     screenshotFile = null;

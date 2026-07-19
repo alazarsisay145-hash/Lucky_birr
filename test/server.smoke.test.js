@@ -182,18 +182,23 @@ test('GET /api/admin/submissions returns 401 without token', async () => {
 test('game shell auth flow stores and restores AUTH_TOKEN', () => {
   const html = readGameShell();
   assert.match(html, /const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN'/);
+  assert.match(html, /const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token'/);
   assert.match(html, /localStorage\.setItem\(AUTH_TOKEN_STORAGE_KEY, token\)/);
   assert.match(html, /localStorage\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
   assert.match(html, /localStorage\.removeItem\(AUTH_TOKEN_STORAGE_KEY\)/);
-  assert.doesNotMatch(html, /lb_token/);
+  assert.match(html, /localStorage\.removeItem\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /localStorage\.getItem\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
 });
 
 test('game shell auth flow initializes persisted auth and protects submissions', () => {
   const html = compactHtml(readGameShell());
   assert.match(html, /async function initAuthState\(\)/);
+  assert.match(html, /function getPersistedAuthToken\(\)/);
   assert.match(html, /fetch\('\/api\/auth\/login', \{ method: 'POST'/);
   assert.match(html, /fetch\('\/api\/auth\/register', \{ method: 'POST'/);
   assert.match(html, /fetch\('\/api\/auth\/me', \{ headers:/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ AUTH_TOKEN \}/);
+  assert.match(html, /bindAuthErrorClear\(\['loginEmail', 'loginPassword'\], 'loginError'\)/);
+  assert.match(html, /bindAuthErrorClear\(\['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'\], 'registerError'\)/);
   assert.match(html, /initAuthState\(\);/);
 });

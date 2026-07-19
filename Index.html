@@ -974,6 +974,7 @@
 
         // ===== AUTH STATE =====
         const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
+        const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token';
         const AUTH_LOADING_OPACITY = '0.55';
         let AUTH_TOKEN = null;
         let currentUser = null;
@@ -1009,12 +1010,28 @@
             AUTH_TOKEN = token;
             currentUser = user;
             localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
         }
 
         function clearAuthSession() {
             AUTH_TOKEN = null;
             currentUser = null;
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+        }
+
+        function getPersistedAuthToken() {
+            const stored = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            if (stored) {
+                return stored;
+            }
+            const legacy = localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            if (legacy) {
+                localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacy);
+                localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+                return legacy;
+            }
+            return null;
         }
 
         function getAuthErrorMessage(resp, data, fallback) {
@@ -1039,6 +1056,12 @@
             document.getElementById('authOverlay').classList.remove('hidden');
             showLoginScreen();
             checkSendReady();
+        }
+
+        function bindAuthErrorClear(inputIds, errorId) {
+            inputIds.forEach((id) => {
+                document.getElementById(id).addEventListener('input', () => setAuthError(errorId, ''));
+            });
         }
 
         function updatePwStrength() {
@@ -1182,7 +1205,7 @@
         }
 
         async function initAuthState() {
-            const stored = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            const stored = getPersistedAuthToken();
             if (!stored) {
                 showAuthOverlay();
                 return;
@@ -1620,12 +1643,8 @@
         document.getElementById('regConfirm').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') doRegister();
         });
-        ['loginEmail', 'loginPassword'].forEach((id) => {
-            document.getElementById(id).addEventListener('input', () => setAuthError('loginError', ''));
-        });
-        ['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'].forEach((id) => {
-            document.getElementById(id).addEventListener('input', () => setAuthError('registerError', ''));
-        });
+        bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
+        bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
 
         async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;

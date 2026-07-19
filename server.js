@@ -41,8 +41,9 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
-// Normalize WEBSITE_URL: strip trailing slash, validate format.
+// Normalize WEBSITE_URL: strip trailing slash(es), validate format.
 const WEBSITE_URL = (() => {
+  // Strip one or more trailing slashes – handles copy-paste from browser address bars.
   const raw = (process.env.WEBSITE_URL || '').trim().replace(/\/+$/, '');
   if (!raw) {
     console.warn(
@@ -60,6 +61,8 @@ const WEBSITE_URL = (() => {
         'Update WEBSITE_URL to an https:// URL.'
       );
     }
+    // Return parsed.origin (protocol + host + port) – the normalized canonical
+    // form that browsers send as the Origin header; any path or trailing slash is excluded.
     return parsed.origin;
   } catch {
     console.warn(

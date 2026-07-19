@@ -533,3 +533,30 @@ test('GET /readyz includes detail field when Supabase is not configured', async 
     await stopServer(server, getStderr);
   }
 });
+
+// ===== PGRST205 / isMissingTableError TESTS =====
+
+test('game shell loadAuthSetupStatus includes server detail when database check fails', () => {
+  const html = readGameShell();
+  // Verify the detail field is appended when blockers exist
+  assert.match(html, /data\.detail\.trim\(\)/, 'detail must be used when blockers are present');
+  assert.match(html, /formatBlockerList\(blockers\)/, 'formatBlockerList must still be called');
+});
+
+test('game shell loadAuthSetupStatus appends detail to blockers message', () => {
+  const html = compactHtml(readGameShell());
+  // The updated template literal must include the detail variable alongside blockers
+  assert.match(
+    html,
+    /formatBlockerList\(blockers\)\}\$\{detail\}/,
+    'message template must append detail after the blockers list'
+  );
+});
+
+test('server.js isMissingTableError helper recognizes PGRST205 alongside 42P01', () => {
+  // Verify both codes appear in server.js (ensures the helper covers both variants)
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(src, /isMissingTableError/, 'isMissingTableError helper must be defined');
+  assert.match(src, /'42P01'/, 'helper must recognise PostgreSQL 42P01');
+  assert.match(src, /'PGRST205'/, 'helper must recognize PostgREST PGRST205');
+});

@@ -1107,7 +1107,8 @@
                     blockers.push('server authentication is not configured');
                 }
                 if (blockers.length > 0) {
-                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}.`);
+                    const detail = (typeof data.detail === 'string' && data.detail.trim()) ? ` (${data.detail.trim()})` : '';
+                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}${detail}.`);
                     return;
                 }
                 if (typeof data.detail === 'string' && data.detail.trim()) {

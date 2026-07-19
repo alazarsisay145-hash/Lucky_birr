@@ -413,4 +413,115 @@ test('API routes are not swallowed by SPA fallback', async () => {
   }
 });
 
+// ===== WEBSITE_URL NORMALIZATION AND VALIDATION TESTS =====
 
+test('WEBSITE_URL with trailing slash is normalized and still allows matching origin', async () => {
+  const port = 3122;
+  const websiteUrl = `http://127.0.0.1:${port}`;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    // Provide URL with trailing slash – server must normalize it
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', WEBSITE_URL: websiteUrl + '/' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  try {
+    await wait(1200);
+    // The browser origin never has a trailing slash, so matching must still work
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+      headers: { Origin: websiteUrl }
+    });
+    assert.equal(response.status, 200, 'trailing-slash WEBSITE_URL must be normalized and still allow matching origin');
+    const data = await response.json();
+    assert.ok(data.ok);
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('invalid WEBSITE_URL blocks cross-origin requests (falls back to no-CORS mode)', async () => {
+  const port = 3123;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', WEBSITE_URL: 'not-a-valid-url' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  try {
+    await wait(1200);
+    // With an invalid WEBSITE_URL the server treats it as unset:
+    // cross-origin requests receive no CORS header → the browser blocks them,
+    // but the server itself responds 200 (not 403). Verify no origin is reflected back.
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+      headers: { Origin: 'https://evil.example.com' }
+    });
+    const acao = response.headers.get('access-control-allow-origin');
+    assert.equal(acao, null, 'invalid WEBSITE_URL must not accidentally reflect back any origin in ACAO header');
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+// ===== TELEGRAM PARTIAL CONFIG DIAGNOSTIC TESTS =====
+
+test('partial Telegram config (token only) emits actionable warning', async () => {
+  const port = 3124;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', TELEGRAM_BOT_TOKEN: '123456:fake_token' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let stderr = '';
+  server.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  try {
+    await wait(1200);
+    // Server must still start cleanly
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200, 'server must start even with partial Telegram config');
+    // Warning must mention the missing piece
+    assert.ok(
+      stderr.includes('ADMIN_CHAT_ID') && stderr.includes('missing'),
+      `Expected warning about missing ADMIN_CHAT_ID, got: ${stderr}`
+    );
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('partial Telegram config (chat ID only) emits actionable warning', async () => {
+  const port = 3125;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', ADMIN_CHAT_ID: '987654321' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let stderr = '';
+  server.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  try {
+    await wait(1200);
+    // Server must still start cleanly
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200, 'server must start even with partial Telegram config');
+    // Warning must mention the missing piece
+    assert.ok(
+      stderr.includes('TELEGRAM_BOT_TOKEN') && stderr.includes('missing'),
+      `Expected warning about missing TELEGRAM_BOT_TOKEN, got: ${stderr}`
+    );
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});

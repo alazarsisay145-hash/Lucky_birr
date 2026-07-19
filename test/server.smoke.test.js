@@ -6,73 +6,165 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-test('server serves the game shell', async () => {
-  const port = 3101;
+function spawnServer(port) {
   const server = spawn(process.execPath, ['server.js'], {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      NODE_ENV: 'test'
-    },
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
-
   let stderr = '';
-  server.stderr.on('data', (chunk) => {
-    stderr += chunk.toString();
-  });
+  server.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  return { server, getStderr: () => stderr };
+}
 
+async function stopServer(server, getStderr) {
+  server.kill('SIGTERM');
+  await Promise.race([
+    new Promise((resolve) => server.once('exit', resolve)),
+    wait(2000)
+  ]);
+  assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${getStderr()}`);
+}
+
+test('server serves the game shell', async () => {
+  const port = 3101;
+  const { server, getStderr } = spawnServer(port);
   try {
     await wait(1200);
     const response = await fetch(`http://127.0.0.1:${port}/`);
     const body = await response.text();
-
     assert.equal(response.status, 200);
     assert.match(body, /LUCKY BIRR/i);
     assert.match(body, /Tap to Buy/i);
   } finally {
-    server.kill('SIGTERM');
-    await Promise.race([
-      new Promise((resolve) => server.once('exit', resolve)),
-      wait(2000)
-    ]);
-    assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${stderr}`);
+    await stopServer(server, getStderr);
   }
 });
 
 test('server CSP allows the game shell resources to render', async () => {
   const port = 3102;
-  const server = spawn(process.execPath, ['server.js'], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      NODE_ENV: 'test'
-    },
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  let stderr = '';
-  server.stderr.on('data', (chunk) => {
-    stderr += chunk.toString();
-  });
-
+  const { server, getStderr } = spawnServer(port);
   try {
     await wait(1200);
     const response = await fetch(`http://127.0.0.1:${port}/`);
     const csp = response.headers.get('content-security-policy') || '';
-
     assert.match(csp, /script-src[^;]*'unsafe-inline'/i);
     assert.match(csp, /script-src[^;]*https:\/\/telegram\.org/i);
     assert.match(csp, /style-src[^;]*'unsafe-inline'/i);
     assert.match(csp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/i);
   } finally {
-    server.kill('SIGTERM');
-    await Promise.race([
-      new Promise((resolve) => server.once('exit', resolve)),
-      wait(2000)
-    ]);
-    assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${stderr}`);
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/auth/register returns 400 when fields missing', async () => {
+  const port = 3103;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/auth/register returns 400 for weak password', async () => {
+  const port = 3104;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'test@example.com', password: 'weak' })
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/auth/login returns 400 when fields missing', async () => {
+  const port = 3105;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /api/auth/me returns 401 without token', async () => {
+  const port = 3106;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/me`);
+    assert.equal(response.status, 401);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /api/auth/me returns 401 with invalid token', async () => {
+  const port = 3107;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/me`, {
+      headers: { Authorization: '******' }
+    });
+    assert.equal(response.status, 401);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/submissions returns 401 without token', async () => {
+  const port = 3108;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 50 })
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /api/admin/submissions returns 401 without token', async () => {
+  const port = 3109;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/submissions`);
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
   }
 });

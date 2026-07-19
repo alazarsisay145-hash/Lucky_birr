@@ -515,18 +515,161 @@
         }
 
         #fileInput { display: none; }
+
+        /* ===== AUTH OVERLAY ===== */
+        .auth-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: var(--bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 16px; overflow-y: auto;
+        }
+        .auth-overlay.hidden { display: none; }
+
+        .auth-logo { text-align: center; margin-bottom: 20px; }
+        .auth-logo .flag { font-size: 36px; }
+        .auth-logo h2 { font-size: 24px; font-weight: 900; color: var(--accent); margin-top: 4px; }
+        .auth-logo p { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+        .auth-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%; max-width: 380px;
+        }
+
+        .auth-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; }
+        .auth-form { display: flex; flex-direction: column; gap: 12px; }
+
+        .auth-input-group { display: flex; flex-direction: column; gap: 5px; }
+        .auth-input-group label { font-size: 12px; font-weight: 600; color: var(--text2); }
+
+        .auth-input {
+            background: var(--card2);
+            border: 1px solid var(--border);
+            color: var(--text); padding: 12px;
+            border-radius: 8px; font-size: 14px;
+            font-family: inherit; outline: none; width: 100%;
+        }
+        .auth-input:focus { border-color: var(--accent); }
+
+        .auth-btn {
+            background: var(--accent); color: var(--bg);
+            border: none; padding: 14px; border-radius: 8px;
+            font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
+            margin-top: 4px; font-family: inherit;
+        }
+        .auth-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .auth-link { text-align: center; font-size: 13px; color: var(--text2); margin-top: 12px; }
+        .auth-link a { color: var(--accent); cursor: pointer; font-weight: 600; }
+
+        .auth-error {
+            color: #fca5a5;
+            font-size: 12px;
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.3);
+            padding: 10px 12px; border-radius: 8px; display: none;
+        }
+        .auth-error.show { display: block; }
+
+        .auth-screen { display: none; }
+        .auth-screen.active { display: block; }
+
+        .pw-hint { font-size: 11px; color: var(--text2); margin-top: 2px; }
+        .pw-strength { height: 4px; border-radius: 2px; background: var(--border); margin-top: 5px; overflow: hidden; }
+        .pw-strength-bar { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; width: 0%; }
+
+        /* User info in header */
+        .user-info {
+            display: none; align-items: center; gap: 8px;
+            background: var(--card2); border: 1px solid var(--border);
+            border-radius: 20px; padding: 4px 12px;
+            font-size: 12px; margin-top: 8px; cursor: pointer;
+        }
+        .user-info.show { display: inline-flex; }
+        .user-info .user-name { font-weight: 700; color: var(--text); }
+        .user-info .user-balance { color: var(--accent); font-weight: 600; }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+    <!-- AUTH OVERLAY -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-logo">
+            <div class="flag">🇪🇹</div>
+            <h2>🎰 LUCKY BIRR</h2>
+            <p>Telegram Mini App • Live Draw • Instant Win</p>
+        </div>
+
+        <!-- Login Screen -->
+        <div class="auth-screen active" id="screenLoginAuth">
+            <div class="auth-card">
+                <div class="auth-title">Welcome back</div>
+                <div id="loginError" class="auth-error"></div>
+                <div class="auth-form">
+                    <div class="auth-input-group">
+                        <label for="loginEmail">Email</label>
+                        <input class="auth-input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="loginPassword">Password</label>
+                        <input class="auth-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+                    </div>
+                    <button class="auth-btn" id="loginBtn" onclick="doLogin()">Sign In</button>
+                </div>
+                <div class="auth-link">Don't have an account? <a onclick="showRegisterScreen()">Register</a></div>
+            </div>
+        </div>
+
+        <!-- Register Screen -->
+        <div class="auth-screen" id="screenRegisterAuth">
+            <div class="auth-card">
+                <div class="auth-title">Create account</div>
+                <div id="registerError" class="auth-error"></div>
+                <div class="auth-form">
+                    <div class="auth-input-group">
+                        <label for="regFullName">Full Name</label>
+                        <input class="auth-input" id="regFullName" type="text" placeholder="Abebe Kebede" autocomplete="name">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regEmail">Email</label>
+                        <input class="auth-input" id="regEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regPhone">Phone (optional)</label>
+                        <input class="auth-input" id="regPhone" type="tel" placeholder="0911234567" autocomplete="tel">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regPassword">Password</label>
+                        <input class="auth-input" id="regPassword" type="password" placeholder="Min 8 chars, upper+lower+number" autocomplete="new-password" oninput="updatePwStrength()">
+                        <div class="pw-strength"><div class="pw-strength-bar" id="pwStrengthBar"></div></div>
+                        <div class="pw-hint" id="pwHint">At least 8 characters with uppercase, lowercase and number</div>
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="regConfirm">Confirm Password</label>
+                        <input class="auth-input" id="regConfirm" type="password" placeholder="Repeat password" autocomplete="new-password">
+                    </div>
+                    <button class="auth-btn" id="registerBtn" onclick="doRegister()">Create Account</button>
+                </div>
+                <div class="auth-link">Already have an account? <a onclick="showLoginScreen()">Sign In</a></div>
+            </div>
+        </div>
+    </div>
     <div class="app">
-        <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()">👤 Admin</button>
+        <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()" style="display:none;">👤 Admin</button>
 
         <div class="header">
             <div class="flag">🇪🇹</div>
             <h1>🎰 LUCKY BIRR</h1>
             <p class="sub">Telegram Mini App • Live Draw • Instant Win</p>
             <div class="live-pill"><div class="dot"></div> LIVE</div>
+            <div class="user-info" id="userInfoBar" onclick="showUserMenu()">
+                <span>👤</span>
+                <span class="user-name" id="headerUserName"></span>
+                <span class="user-balance" id="headerUserBalance"></span>
+            </div>
         </div>
 
         <!-- ADMIN PANEL -->
@@ -828,6 +971,199 @@
         let drawRollInterval = null;
         let drawTimeouts = [];
         const WEBAPP_URL = window.location.href.split('#')[0];
+
+        // ===== AUTH STATE =====
+        let AUTH_TOKEN = null;
+        let currentUser = null;
+
+        function showLoginScreen() {
+            document.getElementById('screenLoginAuth').classList.add('active');
+            document.getElementById('screenRegisterAuth').classList.remove('active');
+        }
+
+        function showRegisterScreen() {
+            document.getElementById('screenRegisterAuth').classList.add('active');
+            document.getElementById('screenLoginAuth').classList.remove('active');
+        }
+
+        function setAuthError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.classList.toggle('show', !!msg);
+        }
+
+        function updatePwStrength() {
+            const pw = document.getElementById('regPassword').value;
+            const bar = document.getElementById('pwStrengthBar');
+            const hint = document.getElementById('pwHint');
+            let score = 0;
+            if (pw.length >= 8) score++;
+            if (/[A-Z]/.test(pw)) score++;
+            if (/[a-z]/.test(pw)) score++;
+            if (/[0-9]/.test(pw)) score++;
+            if (/[^A-Za-z0-9]/.test(pw)) score++;
+            const pct = (score / 5) * 100;
+            bar.style.width = pct + '%';
+            bar.style.background = score <= 2 ? '#ef4444' : score === 3 ? '#f59e0b' : '#10b981';
+            hint.textContent = score <= 2 ? 'Weak – add uppercase, number, or symbol' :
+                               score === 3 ? 'Fair – almost there' : 'Strong password ✓';
+        }
+
+        async function doLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            setAuthError('loginError', '');
+            if (!email || !password) {
+                setAuthError('loginError', 'Email and password are required');
+                return;
+            }
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Signing in...';
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    AUTH_TOKEN = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('lb_token', data.token);
+                    onAuthSuccess();
+                } else {
+                    setAuthError('loginError', data.error || 'Login failed');
+                }
+            } catch (_e) {
+                setAuthError('loginError', 'Network error. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign In';
+            }
+        }
+
+        async function doRegister() {
+            const fullName = document.getElementById('regFullName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('regConfirm').value;
+            setAuthError('registerError', '');
+
+            if (!email || !password) {
+                setAuthError('registerError', 'Email and password are required');
+                return;
+            }
+            if (password !== confirm) {
+                setAuthError('registerError', 'Passwords do not match');
+                return;
+            }
+            if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+                setAuthError('registerError', 'Password must be 8+ chars with uppercase, lowercase and number');
+                return;
+            }
+
+            const btn = document.getElementById('registerBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Creating account...';
+            try {
+                const resp = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, phone, password, fullName })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    AUTH_TOKEN = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('lb_token', data.token);
+                    onAuthSuccess();
+                } else {
+                    setAuthError('registerError', data.error || 'Registration failed');
+                }
+            } catch (_e) {
+                setAuthError('registerError', 'Network error. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Account';
+            }
+        }
+
+        function onAuthSuccess() {
+            document.getElementById('authOverlay').classList.add('hidden');
+            // Show user info in header
+            const name = currentUser.fullName || currentUser.email || 'Player';
+            document.getElementById('headerUserName').textContent = name.split(' ')[0];
+            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0) + ' ETB';
+            document.getElementById('userInfoBar').classList.add('show');
+            // Update admin state from server
+            isAdmin = currentUser.isAdmin === true;
+            updateAdminToggleVisibility();
+            checkSendReady();
+        }
+
+        function updateAdminToggleVisibility() {
+            const btn = document.getElementById('adminToggle');
+            btn.style.display = isAdmin ? '' : 'none';
+        }
+
+        function showUserMenu() {
+            const name = currentUser ? (currentUser.fullName || currentUser.email) : '';
+            const balance = currentUser ? currentUser.balance || 0 : 0;
+            if (confirm(`👤 ${name}\n💰 Balance: ${balance} ETB\n\nSign out?`)) {
+                doLogout();
+            }
+        }
+
+        async function doLogout() {
+            if (AUTH_TOKEN) {
+                try {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                    });
+                } catch (_e) { /* silent */ }
+            }
+            AUTH_TOKEN = null;
+            currentUser = null;
+            localStorage.removeItem('lb_token');
+            isAdmin = false;
+            document.getElementById('userInfoBar').classList.remove('show');
+            document.getElementById('adminPanel').classList.remove('active');
+            document.getElementById('adminToggle').classList.remove('active');
+            document.getElementById('adminToggle').textContent = '👤 Admin';
+            updateAdminToggleVisibility();
+            checkSendReady();
+            document.getElementById('authOverlay').classList.remove('hidden');
+            showLoginScreen();
+        }
+
+        async function initAuth() {
+            const stored = localStorage.getItem('lb_token');
+            if (!stored) {
+                document.getElementById('authOverlay').classList.remove('hidden');
+                return;
+            }
+            try {
+                const resp = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + stored }
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    AUTH_TOKEN = stored;
+                    currentUser = data.user;
+                    onAuthSuccess();
+                } else {
+                    localStorage.removeItem('lb_token');
+                    document.getElementById('authOverlay').classList.remove('hidden');
+                }
+            } catch (_e) {
+                // Network error: still show auth overlay
+                localStorage.removeItem('lb_token');
+                document.getElementById('authOverlay').classList.remove('hidden');
+            }
+        }
 
         function getCurrentPlayerName() {
             const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user 
@@ -1188,13 +1524,13 @@
         }
 
         function toggleAdmin() {
-            isAdmin = !isAdmin;
+            if (!isAdmin) return;
             const btn = document.getElementById('adminToggle');
             const panel = document.getElementById('adminPanel');
             btn.classList.toggle('active');
             panel.classList.toggle('active');
-            btn.textContent = isAdmin ? '🔒 Admin' : '👤 Admin';
-            if (isAdmin) updateAdminPanel();
+            btn.textContent = panel.classList.contains('active') ? '🔒 Admin' : '👤 Admin';
+            if (panel.classList.contains('active')) updateAdminPanel();
         }
 
         function copyText(text, el) {
@@ -1220,7 +1556,8 @@
 
         function checkSendReady() {
             const amount = document.getElementById('paymentAmount').value;
-            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0);
+            const authed = !!(AUTH_TOKEN && currentUser);
+            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0 && authed);
         }
 
         document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
@@ -1235,8 +1572,14 @@
                 closeModal();
             }
         });
+        document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doLogin();
+        });
+        document.getElementById('regConfirm').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doRegister();
+        });
 
-        function sendScreenshot() {
+        async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
             const tier = TIERS[currentTier];
             if (!screenshotFile || !amount) {
@@ -1244,26 +1587,49 @@
                 showToast('Please upload screenshot and enter amount');
                 return;
             }
-            const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : {};
-            if (tg && tg.sendData) {
-                tg.sendData(JSON.stringify({
-                    action: 'payment_proof',
-                    amount: amount,
-                    tier: currentTier,
-                    tierPrice: tier.price,
-                    user: user,
-                    timestamp: new Date().toISOString()
-                }));
+            if (!AUTH_TOKEN || !currentUser) {
+                playSound('error');
+                showToast('Please sign in to submit');
+                document.getElementById('authOverlay').classList.remove('hidden');
+                return;
             }
-            playSound('sold');
-            showToast('📨 Sent to admin! Waiting for confirmation...');
-            screenshotFile = null;
-            document.getElementById('fileInput').value = '';
-            document.getElementById('paymentAmount').value = '';
-            document.getElementById('screenshotUpload').classList.remove('has-file');
-            document.getElementById('uploadIcon').textContent = '📤';
-            document.getElementById('uploadText').textContent = 'Tap to upload payment screenshot';
-            document.getElementById('sendBtn').disabled = true;
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending...';
+            try {
+                const formData = new FormData();
+                formData.append('screenshot', screenshotFile);
+                formData.append('amount', amount);
+                formData.append('tier', currentTier);
+                formData.append('paymentMethod', 'telebirr');
+                if (selectedTicket) formData.append('ticketNumber', String(selectedTicket));
+
+                const resp = await fetch('/api/submissions', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    playSound('sold');
+                    showToast('📨 Sent to admin! Waiting for confirmation...');
+                    screenshotFile = null;
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('paymentAmount').value = '';
+                    document.getElementById('screenshotUpload').classList.remove('has-file');
+                    document.getElementById('uploadIcon').textContent = '📤';
+                    document.getElementById('uploadText').textContent = 'Tap to upload payment screenshot';
+                } else {
+                    playSound('error');
+                    showToast('❌ ' + (data.error || 'Submission failed'));
+                }
+            } catch (_e) {
+                playSound('error');
+                showToast('❌ Network error. Please try again.');
+            } finally {
+                checkSendReady();
+                btn.textContent = '📨 Send to Admin';
+            }
         }
 
         function showToast(msg) {
@@ -1448,6 +1814,7 @@
 }
 
 initTier('standard');
+        initAuth();
     </script>
 </body>
 </html>

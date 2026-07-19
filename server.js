@@ -110,6 +110,19 @@ const submitRateLimit = rateLimit({
   message: { error: 'Too many submissions, please try again later.' }
 });
 
+/**
+ * Returns true when a Supabase/PostgREST error indicates that the queried
+ * table (or its schema-cache entry) is missing.  Handles both raw PostgreSQL
+ * code 42P01 (undefined_table) and the PostgREST schema-cache variant
+ * PGRST205 that Supabase may return instead.
+ */
+function isMissingTableError(error) {
+  if (!error) return false;
+  if (error.code === '42P01') return true;
+  if (error.code === 'PGRST205') return true;
+  return false;
+}
+
 function verifyJWT(req, res, next) {
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) {
@@ -165,7 +178,7 @@ app.get('/readyz', async (_req, res) => {
     try {
       const { error } = await supabase.from('users').select('id').limit(1);
       if (error) {
-        if (error.code === '42P01') {
+        if (isMissingTableError(error)) {
           body.detail = 'users table not found – run supabase.sql in the Supabase SQL Editor';
         } else {
           body.detail = `Database connectivity error (${error.code}) – verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY`;
@@ -319,7 +332,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
 
     if (lookupError) {
       console.error('Supabase user lookup failed during register:', lookupError.code, lookupError.message);
-      if (lookupError.code === '42P01') {
+      if (isMissingTableError(lookupError)) {
         return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
       }
       return res.status(500).json({ error: 'Registration service unavailable – database error' });
@@ -345,7 +358,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res, next) => {
 
     if (insertError) {
       console.error('Supabase user insert failed:', insertError.code, insertError.message);
-      if (insertError.code === '42P01') {
+      if (isMissingTableError(insertError)) {
         return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
       }
       return res.status(500).json({ error: 'Failed to create user – database error' });
@@ -395,7 +408,7 @@ app.post('/api/auth/login', authRateLimit, async (req, res, next) => {
 
     if (error) {
       console.error('Supabase user lookup failed during login:', error.code, error.message);
-      if (error.code === '42P01') {
+      if (isMissingTableError(error)) {
         return res.status(500).json({ error: 'Database schema not set up – run supabase.sql in the Supabase SQL Editor' });
       }
       return res.status(500).json({ error: 'Login service unavailable – database error' });

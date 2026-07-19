@@ -253,17 +253,28 @@ If you are running without Telegram (admin panel only):
 ### Runbook
 
 **`GET /readyz` returns 503**
-- Open `/readyz` in your browser and read the `detail` field
-- If `detail` mentions `SUPABASE_URL`: set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Render
-- If `detail` mentions `users table not found`: run `supabase.sql` in the Supabase SQL Editor
-- If `detail` mentions connectivity: verify Supabase project is active and not paused (free-tier projects pause after inactivity)
-- If `jwt: false`: set `JWT_SECRET` in Render
+
+The login screen will display the exact `detail` from the server, so read that first.  The possible causes and recovery steps are:
+
+| `detail` contains | Root cause | Fix |
+|---|---|---|
+| `SUPABASE_URL` | Missing env vars | Set `SUPABASE_URL` **and** `SUPABASE_SERVICE_ROLE_KEY` in Render → redeploy |
+| `users table not found` | Schema never applied | Run `supabase.sql` in the Supabase SQL Editor, then redeploy |
+| `PGRST205` | PostgREST schema-cache stale | Run `supabase.sql` in the Supabase SQL Editor; trigger a schema-cache reload in the Supabase dashboard |
+| `connectivity` | Network / project paused | Verify the Supabase project is active (free-tier projects pause after inactivity) |
+| `jwt: false` | Missing JWT secret | Set `JWT_SECRET` in Render → redeploy |
+
+After each fix, verify with:
+```bash
+curl https://<your-app>.onrender.com/readyz
+# Expected: {"ok":true,"checks":{"database":true,"jwt":true,"telegram":false}}
+```
 
 **Registration or Sign In fails**
-- Check `/readyz` first (see above)
+- Check `/readyz` first (see above); the login screen now shows the specific reason
 - Confirm `ADMIN_EMAILS` includes the exact email you registered with (matching is case-insensitive)
 - Confirm `SUPABASE_SERVICE_ROLE_KEY` is the **service role** key, not the anon/public key
-- Check Render logs for server-side error details (e.g., `Supabase user insert failed: 42P01`)
+- Check Render logs for server-side error details (e.g., `Supabase user insert failed: 42P01` or `PGRST205`)
 
 **Telegram notifications not sending** (optional – skip if Telegram is disabled)
 - Verify `TELEGRAM_BOT_TOKEN` and `ADMIN_CHAT_ID` are set (webhook secret is **not** required for notifications)

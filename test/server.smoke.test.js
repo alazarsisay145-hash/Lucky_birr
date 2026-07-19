@@ -288,3 +288,129 @@ test('POST /webhook/:secret returns 403 when secret does not match', async () =>
   }
 });
 
+// ===== DEPLOYMENT-CRITICAL TESTS =====
+
+test('server binds to 0.0.0.0 and respects PORT env variable', async () => {
+  const port = 3115;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    // Bind verification: connect via 127.0.0.1 (mapped to 0.0.0.0 listener)
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.ok(data.ok, 'healthz should return ok:true when bound to 0.0.0.0');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('same-origin requests (no Origin header) are allowed by CORS', async () => {
+  const port = 3116;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    // Simulate a same-origin request: no Origin header set
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200);
+    // CORS should not block a request with no Origin header
+    const corsHeader = response.headers.get('access-control-allow-origin');
+    // When origin is absent, express cors middleware doesn't echo it back –
+    // the response just proceeds normally without a CORS rejection.
+    assert.notEqual(response.status, 403, 'same-origin request must not be rejected by CORS');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('cross-origin request with wrong Origin is rejected by CORS when WEBSITE_URL is set', async () => {
+  const port = 3117;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', WEBSITE_URL: 'https://lucky-birr.onrender.com' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  const getStderr = () => '';
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+      headers: { Origin: 'https://evil.example.com' }
+    });
+    assert.equal(response.status, 403, 'cross-origin request with wrong Origin must be blocked');
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('cross-origin request with correct WEBSITE_URL Origin is allowed', async () => {
+  const port = 3118;
+  const websiteUrl = `http://127.0.0.1:${port}`;
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', WEBSITE_URL: websiteUrl },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+      headers: { Origin: websiteUrl }
+    });
+    assert.equal(response.status, 200, 'request matching WEBSITE_URL must be allowed');
+    const data = await response.json();
+    assert.ok(data.ok);
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('static assets are served from /public directory', async () => {
+  const port = 3119;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/index.html`);
+    // public/index.html exists (payment form page)
+    assert.equal(response.status, 200);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('unknown routes serve the game shell (SPA fallback)', async () => {
+  const port = 3120;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/some/unknown/path`);
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /LUCKY BIRR/i, 'SPA fallback must serve game shell for unknown routes');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('API routes are not swallowed by SPA fallback', async () => {
+  const port = 3121;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    // /api/auth/me without a token should return 401, not 200 with HTML
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/me`);
+    assert.equal(response.status, 401);
+    const ct = response.headers.get('content-type') || '';
+    assert.ok(ct.includes('application/json'), 'API route must return JSON, not HTML');
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+

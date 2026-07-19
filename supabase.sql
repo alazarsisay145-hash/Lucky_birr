@@ -59,9 +59,10 @@ create index if not exists transactions_user_id_idx on transactions(user_id);
 -- Only use it server-side. Use the anon key or user JWTs for any client-side access.
 
 -- ===== STORAGE =====
--- Create the screenshots bucket (run once):
--- insert into storage.buckets (id, name, public) values ('screenshots', 'screenshots', true)
--- on conflict do nothing;
---
+-- Create the screenshots bucket (idempotent – safe to re-run):
+insert into storage.buckets (id, name, public)
+values ('screenshots', 'screenshots', true)
+on conflict (id) do nothing;
+
 -- IMPORTANT: Set the bucket to public only if screenshot URLs must be directly accessible.
 -- Consider restricting uploads to authenticated service role only via storage policies.

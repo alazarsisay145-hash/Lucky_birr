@@ -568,6 +568,463 @@ app.post('/api/submissions', verifyJWT, submitRateLimit, upload.single('screensh
   }
 });
 
+// ===== CHAPA PAYMENT =====
+const CHAPA_SECRET_KEY = process.env.CHAPA_SECRET_KEY || '';
+const CHAPA_API_URL = 'https://api.chapa.co/v1';
+
+if (!CHAPA_SECRET_KEY) {
+  console.warn('CHAPA_SECRET_KEY is missing. Payment gateway features will not work.');
+}
+
+async function chapaRequest(endpoint, method, body) {
+  const response = await fetch(`${CHAPA_API_URL}${endpoint}`, {
+    method,
+    headers: {
+      Authorization: 'Chapa ' + CHAPA_SECRET_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await response.json();
+  return { ok: response.ok, status: response.status, data };
+}
+
+// ===== DEPOSIT – INITIALIZE =====
+app.post('/api/deposits/initialize', verifyJWT, async (req, res, next) => {
+  try {
+    if (!CHAPA_SECRET_KEY) {
+      return res.status(503).json({ error: 'Payment gateway not configured' });
+    }
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+
+    const { amount, currency = 'ETB', return_url } = req.body;
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum < 10) {
+      return res.status(400).json({ error: 'Minimum deposit amount is 10 ETB' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('email, full_name, phone')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const tx_ref = `LB-DEP-${req.user.id.slice(0, 8)}-${Date.now()}`;
+    const chapaBody = {
+      amount: amountNum.toString(),
+      currency,
+      email: user.email,
+      first_name: (user.full_name || 'Player').split(' ')[0],
+      last_name: (user.full_name || 'Player').split(' ').slice(1).join(' ') || 'User',
+      phone_number: user.phone || '',
+      tx_ref,
+      callback_url: `${process.env.WEBSITE_URL || ''}/api/deposits/callback`,
+      return_url: return_url || `${process.env.WEBSITE_URL || ''}/`,
+      customization: { title: 'Lucky Birr Deposit', description: 'Wallet deposit' }
+    };
+
+    const { ok, data: chapaData } = await chapaRequest('/transaction/initialize', 'POST', chapaBody);
+    if (!ok || chapaData.status !== 'success') {
+      console.warn('Chapa initialize failed:', chapaData);
+      return res.status(502).json({ error: 'Payment initialization failed. Please try again.' });
+    }
+
+    // Record pending deposit in DB
+    await supabase.from('deposits').insert({
+      user_id: req.user.id,
+      amount: amountNum,
+      tx_ref,
+      status: 'pending',
+      checkout_url: chapaData.data?.checkout_url || null
+    });
+
+    return res.json({ ok: true, checkout_url: chapaData.data?.checkout_url, tx_ref });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== DEPOSIT – CALLBACK (Chapa webhook) =====
+app.post('/api/deposits/callback', async (req, res) => {
+  try {
+    // Verify this came from Chapa using a shared webhook secret
+    const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET || '';
+    if (webhookSecret) {
+      const signature = req.headers['chapa-signature'] || '';
+      if (signature !== webhookSecret) {
+        return res.sendStatus(403);
+      }
+    }
+
+    const { tx_ref, status } = req.body;
+    if (!tx_ref || typeof tx_ref !== 'string' || !/^[A-Za-z0-9_-]+$/.test(tx_ref)) {
+      return res.sendStatus(400);
+    }
+    if (!supabase) return res.sendStatus(503);
+
+    const { data: dep } = await supabase
+      .from('deposits')
+      .select('*')
+      .eq('tx_ref', tx_ref)
+      .maybeSingle();
+
+    if (!dep) return res.sendStatus(404);
+    if (dep.status === 'completed') return res.sendStatus(200);
+
+    // Always use the tx_ref stored in DB (not user input) for the Chapa verify URL
+    const safeTxRef = dep.tx_ref;
+
+    if (status === 'success') {
+      // Verify with Chapa before crediting
+      const { ok, data: verifyData } = await chapaRequest(`/transaction/verify/${safeTxRef}`, 'GET');
+      if (ok && verifyData.status === 'success' && verifyData.data?.status === 'success') {
+        await supabase.from('deposits').update({ status: 'completed' }).eq('tx_ref', safeTxRef);
+        // Credit user balance
+        await supabase.rpc('credit_balance', { uid: dep.user_id, delta: dep.amount });
+        // Record transaction
+        await supabase.from('transactions').insert({
+          user_id: dep.user_id,
+          amount: dep.amount,
+          type: 'deposit',
+          description: `Deposit via Chapa (${safeTxRef})`
+        });
+        await notifyAdmin(`💰 Deposit confirmed\nUser: ${dep.user_id}\nAmount: ${dep.amount} ETB\nRef: ${safeTxRef}`, null);
+      } else {
+        await supabase.from('deposits').update({ status: 'failed' }).eq('tx_ref', safeTxRef);
+      }
+    } else {
+      await supabase.from('deposits').update({ status: 'failed' }).eq('tx_ref', safeTxRef);
+    }
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error('Deposit callback error:', err.message);
+    return res.sendStatus(500);
+  }
+});
+
+// ===== DEPOSIT – MANUAL (screenshot upload, for non-Chapa) =====
+app.post('/api/deposits/manual', verifyJWT, submitRateLimit, upload.single('screenshot'), async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const { amount, payment_method } = req.body;
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum < 10) {
+      return res.status(400).json({ error: 'Minimum deposit is 10 ETB' });
+    }
+    const allowed = ['telebirr', 'dashen', 'cbe'];
+    if (!allowed.includes(payment_method)) {
+      return res.status(400).json({ error: 'Invalid payment method' });
+    }
+
+    let screenshotUrl = null;
+    let screenshotPath = null;
+    if (req.file) {
+      const ext = mimeToExtension(req.file.mimetype);
+      const filePath = `deposits/${Date.now()}-${randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from(SUPABASE_BUCKET).upload(filePath, req.file.buffer, {
+        contentType: req.file.mimetype, upsert: false
+      });
+      if (upErr) return res.status(502).json({ error: 'Screenshot upload failed' });
+      const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
+      screenshotUrl = urlData?.publicUrl || null;
+      screenshotPath = filePath;
+    }
+
+    const tx_ref = `LB-MAN-${req.user.id.slice(0, 8)}-${Date.now()}`;
+    const { data: dep, error: insErr } = await supabase.from('deposits').insert({
+      user_id: req.user.id,
+      amount: amountNum,
+      tx_ref,
+      payment_method,
+      screenshot_url: screenshotUrl,
+      screenshot_path: screenshotPath,
+      status: 'pending'
+    }).select('id').single();
+
+    if (insErr) return res.status(500).json({ error: 'Failed to record deposit request' });
+
+    await notifyAdmin(
+      `💳 Manual Deposit Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}\nRef: ${tx_ref}`,
+      screenshotUrl
+    );
+
+    return res.status(201).json({ ok: true, depositId: dep.id, message: 'Deposit request received. Admin will confirm shortly.' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== ADMIN – APPROVE MANUAL DEPOSIT =====
+app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+    const { id } = req.params;
+
+    const { data: dep } = await supabase.from('deposits').select('*').eq('id', id).maybeSingle();
+    if (!dep) return res.status(404).json({ error: 'Deposit not found' });
+    if (dep.status !== 'pending') return res.status(400).json({ error: 'Deposit already processed' });
+
+    await supabase.from('deposits').update({ status: 'completed' }).eq('id', id);
+    await supabase.rpc('credit_balance', { uid: dep.user_id, delta: dep.amount });
+    await supabase.from('transactions').insert({
+      user_id: dep.user_id,
+      amount: dep.amount,
+      type: 'deposit',
+      description: `Manual deposit approved (${dep.tx_ref})`
+    });
+
+    return res.json({ ok: true, message: 'Deposit approved and balance credited' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== WITHDRAWAL REQUEST =====
+app.post('/api/withdrawals', verifyJWT, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const { amount, payment_method, account_number, account_name } = req.body;
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum < 50) {
+      return res.status(400).json({ error: 'Minimum withdrawal is 50 ETB' });
+    }
+    const allowed = ['telebirr', 'dashen', 'cbe'];
+    if (!allowed.includes(payment_method)) {
+      return res.status(400).json({ error: 'Invalid payment method' });
+    }
+    if (!account_number || !account_name) {
+      return res.status(400).json({ error: 'Account number and name are required' });
+    }
+
+    // Check balance
+    const { data: user } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.balance < amountNum) return res.status(400).json({ error: 'Insufficient balance' });
+
+    // Deduct balance (hold)
+    const { error: deductErr } = await supabase.rpc('debit_balance', { uid: req.user.id, delta: amountNum });
+    if (deductErr) return res.status(400).json({ error: 'Insufficient balance or balance error' });
+
+    const { data: wd, error: insErr } = await supabase.from('withdrawals').insert({
+      user_id: req.user.id,
+      amount: amountNum,
+      payment_method,
+      account_number,
+      account_name,
+      status: 'pending'
+    }).select('id').single();
+
+    if (insErr) {
+      // Refund the held balance
+      await supabase.rpc('credit_balance', { uid: req.user.id, delta: amountNum });
+      return res.status(500).json({ error: 'Failed to create withdrawal request' });
+    }
+
+    await supabase.from('transactions').insert({
+      user_id: req.user.id,
+      amount: -amountNum,
+      type: 'withdrawal',
+      description: `Withdrawal request via ${payment_method}`
+    });
+
+    await notifyAdmin(
+      `💸 Withdrawal Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}\nAccount: ${account_number} (${account_name})`,
+      null
+    );
+
+    return res.status(201).json({ ok: true, withdrawalId: wd.id, message: 'Withdrawal request submitted. Will be processed within 24h.' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== ADMIN – PROCESS WITHDRAWAL =====
+app.post('/api/admin/withdrawals/:id/complete', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+    const { id } = req.params;
+    const { data: wd } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (!wd) return res.status(404).json({ error: 'Withdrawal not found' });
+    if (wd.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+    await supabase.from('withdrawals').update({ status: 'completed' }).eq('id', id);
+    return res.json({ ok: true, message: 'Withdrawal marked as completed' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+app.post('/api/admin/withdrawals/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+    const { id } = req.params;
+    const { data: wd } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (!wd) return res.status(404).json({ error: 'Withdrawal not found' });
+    if (wd.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+    await supabase.from('withdrawals').update({ status: 'rejected' }).eq('id', id);
+    // Refund balance
+    await supabase.rpc('credit_balance', { uid: wd.user_id, delta: wd.amount });
+    await supabase.from('transactions').insert({
+      user_id: wd.user_id,
+      amount: wd.amount,
+      type: 'withdrawal_refund',
+      description: 'Withdrawal rejected – balance refunded'
+    });
+    return res.json({ ok: true, message: 'Withdrawal rejected and balance refunded' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== GAME BET =====
+const GAME_CONFIGS = {
+  keno: { minBet: 5, maxBet: 500, multiplierRange: [0, 10] },
+  higher_lower: { minBet: 5, maxBet: 500 },
+  aviator: { minBet: 5, maxBet: 1000 }
+};
+
+app.post('/api/games/bet', verifyJWT, async (req, res, next) => {
+  try {
+    const { game, bet_amount, client_seed } = req.body;
+    if (!GAME_CONFIGS[game]) return res.status(400).json({ error: 'Invalid game' });
+
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const cfg = GAME_CONFIGS[game];
+    const betNum = Number(bet_amount);
+    if (!Number.isFinite(betNum) || betNum < cfg.minBet || betNum > cfg.maxBet) {
+      return res.status(400).json({ error: `Bet must be between ${cfg.minBet} and ${cfg.maxBet} ETB` });
+    }
+
+    const { data: user } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.balance < betNum) return res.status(400).json({ error: 'Insufficient balance' });
+
+    // Deduct bet
+    const { error: deductErr } = await supabase.rpc('debit_balance', { uid: req.user.id, delta: betNum });
+    if (deductErr) return res.status(400).json({ error: 'Insufficient balance' });
+
+    // Compute outcome server-side
+    const serverSeed = randomUUID();
+    let result = null;
+    let payout = 0;
+
+    if (game === 'keno') {
+      const { picks } = req.body;
+      if (!Array.isArray(picks) || picks.length < 1 || picks.length > 10) {
+        await supabase.rpc('credit_balance', { uid: req.user.id, delta: betNum });
+        return res.status(400).json({ error: 'Pick 1–10 numbers' });
+      }
+      const drawn = [];
+      const pool = Array.from({ length: 80 }, (_, i) => i + 1);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      for (let i = 0; i < 20; i++) drawn.push(pool[i]);
+      const hits = picks.filter((n) => drawn.includes(n)).length;
+      const kenoPayouts = [0, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256];
+      const multiplier = kenoPayouts[Math.min(hits, 10)];
+      payout = betNum * multiplier;
+      result = { drawn: drawn.sort((a, b) => a - b), picks, hits, multiplier, payout };
+    } else if (game === 'higher_lower') {
+      const { guess, prev_card: clientPrevCard } = req.body;
+      // Client passes the card they were shown; server independently generates next card
+      const prev_card = (Number.isInteger(Number(clientPrevCard)) && Number(clientPrevCard) >= 1 && Number(clientPrevCard) <= 13)
+        ? Number(clientPrevCard)
+        : Math.floor(Math.random() * 13) + 1;
+      const next_card = Math.floor(Math.random() * 13) + 1;
+      const actual = next_card > prev_card ? 'higher' : next_card < prev_card ? 'lower' : 'equal';
+      const won = (guess === 'higher' && actual === 'higher') || (guess === 'lower' && actual === 'lower');
+      payout = won ? Math.round(betNum * 1.9 * 100) / 100 : 0;
+      result = { prev_card, next_card, guess, actual, won, payout };
+    } else if (game === 'aviator') {
+      // Crash point determined server-side
+      const r = Math.random();
+      const crash = Math.max(1.0, Math.min(100, 0.99 / (1 - r)));
+      const crash_at = Math.round(crash * 100) / 100;
+      const { cashout_at } = req.body;
+      // Default to minimum valid cashout (1.1) to avoid guaranteed losses on missing value
+      const cashoutNum = Math.max(1.1, Number(cashout_at) || 1.1);
+      const won = cashoutNum <= crash_at;
+      payout = won ? Math.round(betNum * cashoutNum * 100) / 100 : 0;
+      result = { crash_at, cashout_at: cashoutNum, won, payout };
+    }
+
+    // Credit winnings
+    if (payout > 0) {
+      await supabase.rpc('credit_balance', { uid: req.user.id, delta: payout });
+    }
+
+    const profit = payout - betNum;
+
+    // Record bet
+    await supabase.from('game_bets').insert({
+      user_id: req.user.id,
+      game,
+      bet_amount: betNum,
+      payout,
+      profit,
+      result: JSON.stringify(result),
+      server_seed: serverSeed
+    });
+
+    // Record transaction
+    if (profit !== 0) {
+      await supabase.from('transactions').insert({
+        user_id: req.user.id,
+        amount: profit,
+        type: profit > 0 ? 'game_win' : 'game_loss',
+        description: `${game} game – bet ${betNum} ETB, payout ${payout} ETB`
+      });
+    }
+
+    // Return updated balance
+    const { data: updated } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
+
+    return res.json({ ok: true, result, balance: updated?.balance ?? null });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== TRANSACTION HISTORY =====
+app.get('/api/transactions', verifyJWT, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { data, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) return res.status(500).json({ error: 'Failed to fetch transactions' });
+    return res.json({ ok: true, transactions: data || [], total: count || 0, page });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== BALANCE =====
+app.get('/api/balance', verifyJWT, async (req, res, next) => {
+  try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+    const { data: user } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ ok: true, balance: user.balance });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ===== ADMIN ROUTES =====
 
 app.get('/api/admin/submissions', verifyJWT, requireAdmin, async (req, res, next) => {

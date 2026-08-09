@@ -605,6 +605,244 @@
         .user-info.show { display: inline-flex; }
         .user-info .user-name { font-weight: 700; color: var(--text); }
         .user-info .user-balance { color: var(--accent); font-weight: 600; }
+
+        /* ===== GAMES LOBBY ===== */
+        .games-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; overflow-y: auto; }
+        .games-screen.active { display: flex; }
+        .games-lobby { padding: 12px; }
+        .lobby-title { font-size: 13px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .game-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .game-card {
+            background: var(--card2); border-radius: 14px; padding: 16px 10px; text-align: center;
+            border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden;
+        }
+        .game-card:active { transform: scale(0.96); }
+        .game-card.keno-card { border-color: #6366f1; }
+        .game-card.hl-card { border-color: #10b981; }
+        .game-card.aviator-card { border-color: #ef4444; }
+        .game-card.raffle-card { border-color: var(--accent); }
+        .game-card .gicon { font-size: 36px; margin-bottom: 6px; }
+        .game-card .gname { font-size: 13px; font-weight: 800; color: var(--text); }
+        .game-card .gdesc { font-size: 10px; color: var(--text2); margin-top: 3px; }
+        .game-card .gbadge {
+            position: absolute; top: 8px; right: 8px; background: #ef4444; color: white;
+            font-size: 8px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+        }
+        .game-card .gbadge.green { background: #10b981; }
+
+        /* ===== KENO GAME ===== */
+        .keno-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+        .keno-screen.active { display: flex; }
+        .game-header {
+            background: var(--card); padding: 10px 12px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+        }
+        .game-back { background: var(--card2); border: none; color: var(--text2); padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .game-back:active { opacity: 0.7; }
+        .game-title { font-size: 15px; font-weight: 800; flex: 1; }
+        .game-balance-pill { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); padding: 4px 10px; border-radius: 12px; font-size: 11px; color: var(--accent); font-weight: 700; }
+        .keno-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+        .keno-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+        .keno-ball {
+            aspect-ratio: 1; border-radius: 8px; background: var(--card2); border: 1.5px solid var(--border);
+            display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+            cursor: pointer; transition: all 0.15s; user-select: none;
+        }
+        .keno-ball:active { transform: scale(0.9); }
+        .keno-ball.picked { background: #6366f1; border-color: #6366f1; color: white; }
+        .keno-ball.drawn { background: rgba(245,158,11,0.2); border-color: var(--accent); color: var(--accent); }
+        .keno-ball.hit { background: #10b981; border-color: #10b981; color: white; }
+        .keno-info { display: flex; gap: 8px; }
+        .keno-stat { flex: 1; background: var(--card2); border-radius: 10px; padding: 10px; text-align: center; border: 1px solid var(--border); }
+        .keno-stat .ks-val { font-size: 16px; font-weight: 800; color: var(--accent); }
+        .keno-stat .ks-lbl { font-size: 9px; color: var(--text2); text-transform: uppercase; margin-top: 2px; }
+        .keno-bet-row { display: flex; gap: 8px; align-items: center; }
+        .keno-bet-input { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--card2); color: var(--text); font-size: 14px; outline: none; text-align: center; font-weight: 700; font-family: inherit; }
+        .keno-bet-input:focus { border-color: #6366f1; }
+        .keno-quick-bets { display: flex; gap: 6px; flex-wrap: wrap; }
+        .keno-quick-bet { background: var(--card2); border: 1px solid var(--border); color: var(--text2); padding: 5px 10px; border-radius: 8px; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+        .keno-quick-bet:active { background: #6366f1; color: white; border-color: #6366f1; }
+        .keno-play-btn { width: 100%; padding: 13px; border-radius: 12px; border: none; background: linear-gradient(135deg, #6366f1, #818cf8); color: white; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        .keno-play-btn:active { transform: scale(0.97); }
+        .keno-play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .keno-result-banner { border-radius: 12px; padding: 14px; text-align: center; display: none; }
+        .keno-result-banner.win { background: rgba(16,185,129,0.15); border: 1px solid #10b981; }
+        .keno-result-banner.loss { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+        .keno-result-banner .rb-title { font-size: 18px; font-weight: 900; }
+        .keno-result-banner.win .rb-title { color: #10b981; }
+        .keno-result-banner.loss .rb-title { color: #ef4444; }
+        .keno-result-banner .rb-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+        .keno-payout-table { background: var(--card2); border-radius: 10px; padding: 10px; border: 1px solid var(--border); }
+        .keno-payout-table .pt-title { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; margin-bottom: 8px; }
+        .keno-payout-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--border); }
+        .keno-payout-row:last-child { border-bottom: none; }
+        .keno-payout-row span:last-child { color: var(--accent); font-weight: 700; }
+
+        /* ===== HIGHER/LOWER GAME ===== */
+        .hl-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+        .hl-screen.active { display: flex; }
+        .hl-body { flex: 1 1 auto; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .hl-cards-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
+        .hl-card {
+            width: 90px; height: 130px; border-radius: 12px; background: var(--card);
+            border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+            font-size: 36px; font-weight: 900; color: var(--text); flex-direction: column; gap: 4px;
+            transition: all 0.3s;
+        }
+        .hl-card.revealed { border-color: var(--accent); background: var(--card2); }
+        .hl-card.win-card { border-color: #10b981; background: rgba(16,185,129,0.1); }
+        .hl-card.lose-card { border-color: #ef4444; background: rgba(239,68,68,0.1); }
+        .hl-card .card-label { font-size: 10px; color: var(--text2); font-weight: 600; }
+        .hl-vs { font-size: 22px; color: var(--text2); font-weight: 900; }
+        .hl-btn-row { display: flex; gap: 10px; }
+        .hl-btn-h { flex: 1; padding: 14px; border-radius: 12px; border: none; background: linear-gradient(135deg, #10b981, #34d399); color: white; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .hl-btn-l { flex: 1; padding: 14px; border-radius: 12px; border: none; background: linear-gradient(135deg, #ef4444, #f87171); color: white; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .hl-btn-h:active, .hl-btn-l:active { transform: scale(0.97); }
+        .hl-btn-h:disabled, .hl-btn-l:disabled { opacity: 0.4; cursor: not-allowed; }
+        .hl-result { border-radius: 12px; padding: 14px; text-align: center; display: none; }
+        .hl-result.show { display: block; }
+        .hl-result.win { background: rgba(16,185,129,0.15); border: 1px solid #10b981; }
+        .hl-result.loss { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+        .hl-result .res-emoji { font-size: 32px; }
+        .hl-result .res-title { font-size: 18px; font-weight: 900; margin-top: 4px; }
+        .hl-result.win .res-title { color: #10b981; }
+        .hl-result.loss .res-title { color: #ef4444; }
+        .hl-result .res-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+        .hl-card-suit { font-size: 12px; }
+        .card-name-map { display: none; }
+
+        /* ===== AVIATOR GAME ===== */
+        .aviator-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+        .aviator-screen.active { display: flex; }
+        .aviator-body { flex: 1 1 auto; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .aviator-display {
+            background: linear-gradient(135deg, #0f172a 0%, #1e0a2e 100%);
+            border-radius: 16px; padding: 24px 16px; text-align: center; position: relative;
+            border: 1px solid rgba(239,68,68,0.3); min-height: 160px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; overflow: hidden;
+        }
+        .plane-emoji { font-size: 40px; transition: all 0.2s; }
+        .plane-emoji.flying { animation: fly 0.5s ease-in-out infinite alternate; }
+        @keyframes fly { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(-10px) rotate(5deg); } }
+        .multiplier-display { font-size: 52px; font-weight: 900; color: #ef4444; line-height: 1; margin-top: 8px; font-family: 'Courier New', monospace; }
+        .multiplier-display.going { color: #10b981; }
+        .multiplier-display.crashed { color: #ef4444; }
+        .avi-status { font-size: 12px; color: var(--text2); margin-top: 6px; min-height: 18px; }
+        .avi-trail { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, rgba(239,68,68,0.6)); border-radius: 0 0 16px 16px; }
+        .cashout-slider-wrap { background: var(--card2); border-radius: 12px; padding: 14px; border: 1px solid var(--border); }
+        .cashout-slider-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+        .cashout-slider-label span:last-child { color: var(--accent); font-weight: 700; font-size: 13px; }
+        .cashout-slider { width: 100%; accent-color: #ef4444; cursor: pointer; }
+        .avi-bet-row { display: flex; gap: 8px; }
+        .avi-bet-input { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--card2); color: var(--text); font-size: 14px; outline: none; text-align: center; font-weight: 700; font-family: inherit; }
+        .avi-bet-input:focus { border-color: #ef4444; }
+        .avi-play-btn { flex: 1; padding: 13px; border-radius: 12px; border: none; background: linear-gradient(135deg, #ef4444, #f87171); color: white; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .avi-play-btn:active { transform: scale(0.97); }
+        .avi-play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .avi-history { background: var(--card2); border-radius: 10px; padding: 10px; border: 1px solid var(--border); }
+        .avi-history-title { font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; margin-bottom: 8px; }
+        .avi-history-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .avi-pill { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+        .avi-pill.safe { background: rgba(16,185,129,0.2); color: #10b981; }
+        .avi-pill.crash { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .avi-result { border-radius: 12px; padding: 14px; text-align: center; display: none; }
+        .avi-result.show { display: block; }
+        .avi-result.win { background: rgba(16,185,129,0.15); border: 1px solid #10b981; }
+        .avi-result.loss { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+
+        /* ===== WALLET SCREEN ===== */
+        .wallet-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; overflow-y: auto; }
+        .wallet-screen.active { display: flex; }
+        .wallet-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .wallet-balance-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 16px; padding: 24px 16px; text-align: center; border: 1px solid rgba(245,158,11,0.3);
+        }
+        .wb-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+        .wb-amount { font-size: 42px; font-weight: 900; color: var(--accent); margin: 6px 0; }
+        .wb-currency { font-size: 14px; color: var(--text2); }
+        .wb-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .wb-btn { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        .wb-btn:active { transform: scale(0.97); }
+        .wb-btn-dep { background: linear-gradient(135deg, var(--accent), #fbbf24); color: #0f172a; }
+        .wb-btn-wd { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+        .deposit-modal-overlay, .withdraw-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none;
+            align-items: flex-end; justify-content: center; z-index: 200; backdrop-filter: blur(4px);
+        }
+        .deposit-modal-overlay.active, .withdraw-modal-overlay.active { display: flex; }
+        .dep-modal, .wd-modal {
+            background: var(--card); width: 100%; max-width: 500px; border-radius: 20px 20px 0 0;
+            padding: 20px; border-top: 2px solid var(--accent); animation: slideUp 0.25s ease;
+            padding-bottom: calc(20px + var(--tg-safe-bottom)); max-height: 90vh; overflow-y: auto;
+        }
+        .dep-modal h3, .wd-modal h3 { font-size: 16px; font-weight: 800; margin-bottom: 14px; }
+        .dep-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+        .dep-tab { flex: 1; padding: 8px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--card2); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.15s; font-family: inherit; }
+        .dep-tab.active { border-color: var(--accent); color: var(--accent); background: rgba(245,158,11,0.1); }
+        .dep-form { display: flex; flex-direction: column; gap: 10px; }
+        .dep-label { font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 4px; display: block; }
+        .dep-input { width: 100%; padding: 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--card2); color: var(--text); font-size: 14px; outline: none; font-family: inherit; }
+        .dep-input:focus { border-color: var(--accent); }
+        .dep-method-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .dep-method-btn {
+            padding: 10px 6px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card2);
+            color: var(--text2); font-size: 11px; font-weight: 600; cursor: pointer; text-align: center;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .dep-method-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(245,158,11,0.1); }
+        .dep-method-btn .dm-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+        .dep-submit-btn { width: 100%; padding: 13px; border-radius: 12px; border: none; background: linear-gradient(135deg, var(--accent), #fbbf24); color: #0f172a; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 4px; }
+        .dep-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .dep-cancel-btn { width: 100%; padding: 11px; border-radius: 12px; border: 1px solid var(--border); background: var(--card2); color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .manual-info-card { background: var(--card2); border-radius: 10px; padding: 12px; border: 1px solid var(--border); }
+        .manual-info-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .manual-info-row:last-child { border-bottom: none; }
+        .manual-info-row .mir-label { font-size: 11px; color: var(--text2); }
+        .manual-info-row .mir-value { font-size: 12px; font-weight: 700; font-family: monospace; }
+        .manual-info-row .mir-copy { background: var(--border); border: none; color: var(--text2); padding: 4px 8px; border-radius: 6px; font-size: 9px; cursor: pointer; }
+        .manual-info-row .mir-copy.copied { background: var(--accent2); color: white; }
+        .screenshot-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 16px; text-align: center; cursor: pointer; background: var(--card2); transition: all 0.2s; }
+        .screenshot-zone:active { border-color: var(--accent); }
+        .screenshot-zone.has-file { border-color: #10b981; background: rgba(16,185,129,0.05); }
+        .screenshot-zone .sz-icon { font-size: 28px; }
+        .screenshot-zone .sz-text { font-size: 12px; color: var(--text2); margin-top: 6px; }
+
+        /* ===== TRANSACTION HISTORY ===== */
+        .tx-section { background: var(--card2); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+        .tx-section-title { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+        .tx-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+        .tx-item:last-child { border-bottom: none; }
+        .tx-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .tx-icon.deposit { background: rgba(16,185,129,0.15); }
+        .tx-icon.withdrawal, .tx-icon.withdrawal_refund { background: rgba(239,68,68,0.1); }
+        .tx-icon.game_win { background: rgba(99,102,241,0.15); }
+        .tx-icon.game_loss { background: rgba(100,116,139,0.1); }
+        .tx-info { flex: 1; }
+        .tx-info .tx-desc { font-size: 12px; font-weight: 600; }
+        .tx-info .tx-date { font-size: 10px; color: var(--text2); margin-top: 2px; }
+        .tx-amount { font-size: 13px; font-weight: 800; }
+        .tx-amount.positive { color: #10b981; }
+        .tx-amount.negative { color: #ef4444; }
+        .tx-empty { text-align: center; padding: 20px; color: var(--text2); font-size: 12px; }
+
+        /* ===== BOTTOM NAV EXTENDED ===== */
+        .bottom-nav { display: flex; justify-content: space-around; padding: 6px 4px; background: var(--card); border-top: 1px solid var(--border); flex-shrink: 0; padding-bottom: calc(6px + var(--tg-safe-bottom)); }
+        .nav-btn { background: none; border: none; color: var(--text2); font-size: 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: all 0.2s; flex: 1; min-width: 0; }
+        .nav-btn:active { transform: scale(0.95); }
+        .nav-btn.active { color: var(--accent); background: rgba(245,158,11,0.1); }
+        .nav-btn .icon { font-size: 18px; }
+
+        /* Game bet form shared */
+        .bet-form { background: var(--card2); border-radius: 12px; padding: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+        .bet-quick-row { display: flex; gap: 6px; }
+        .bet-quick { background: var(--card); border: 1px solid var(--border); color: var(--text2); padding: 5px 10px; border-radius: 8px; font-size: 11px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+        .bet-quick:active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+
+        /* Low balance warning */
+        .low-balance-warn { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 10px 12px; font-size: 12px; color: #fca5a5; text-align: center; display: none; }
+        .low-balance-warn.show { display: block; }
+        .low-balance-warn a { color: var(--accent); cursor: pointer; font-weight: 700; }
     </style>
     <script src="https://telegram.org/js/telegram-web-app.js" async></script>
 </head>
@@ -867,18 +1105,348 @@
 
         <div class="toast" id="toast"></div>
 
+        <!-- GAMES LOBBY SCREEN -->
+        <div class="games-screen" id="screenGames">
+            <div style="flex: 1 1 auto; overflow-y: auto;">
+                <div class="games-lobby">
+                    <div class="lobby-title"><span>🎮</span> Games</div>
+                    <div class="low-balance-warn" id="gamesLowBalance">
+                        Low balance! <a onclick="showDepositModal()">Deposit ETB →</a>
+                    </div>
+                    <div class="game-cards">
+                        <div class="game-card keno-card" onclick="showTab('keno')">
+                            <div class="gicon">🔢</div>
+                            <div class="gname">Keno</div>
+                            <div class="gdesc">Pick numbers • up to 256x</div>
+                            <div class="gbadge green">HOT</div>
+                        </div>
+                        <div class="game-card hl-card" onclick="showTab('higher_lower')">
+                            <div class="gicon">🃏</div>
+                            <div class="gname">Higher / Lower</div>
+                            <div class="gdesc">Guess the next card</div>
+                        </div>
+                        <div class="game-card aviator-card" onclick="showTab('aviator')">
+                            <div class="gicon">✈️</div>
+                            <div class="gname">Aviator</div>
+                            <div class="gdesc">Crash game • cash out!</div>
+                            <div class="gbadge">LIVE</div>
+                        </div>
+                        <div class="game-card raffle-card" onclick="showTab('home')">
+                            <div class="gicon">🎫</div>
+                            <div class="gname">Raffle</div>
+                            <div class="gdesc">Buy tickets • 3 winners</div>
+                            <div class="gbadge green">DRAW</div>
+                        </div>
+                    </div>
+
+                    <!-- Recent wins ticker -->
+                    <div class="section-title"><div class="dot"></div> Recent Wins</div>
+                    <div id="recentWinsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KENO SCREEN -->
+        <div class="keno-screen" id="screenKeno">
+            <div class="game-header">
+                <button class="game-back" onclick="showTab('games')">← Back</button>
+                <div class="game-title">🔢 Keno</div>
+                <div class="game-balance-pill" id="kenoBalancePill">0 ETB</div>
+            </div>
+            <div class="keno-body">
+                <div class="keno-info">
+                    <div class="keno-stat"><div class="ks-val" id="kenoPicked">0</div><div class="ks-lbl">Picked</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="kenoHits">-</div><div class="ks-lbl">Hits</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="kenoMultiplier">-</div><div class="ks-lbl">Multi</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="kenoPayout" style="color:#10b981">-</div><div class="ks-lbl">Win</div></div>
+                </div>
+
+                <div class="keno-result-banner" id="kenoResultBanner">
+                    <div class="rb-title" id="kenoResultTitle"></div>
+                    <div class="rb-sub" id="kenoResultSub"></div>
+                </div>
+
+                <div>
+                    <div class="section-title" style="margin-bottom:8px;"><div class="dot" style="background:#6366f1"></div> Pick 1–10 numbers (from 1–80)</div>
+                    <div class="keno-grid" id="kenoGrid"></div>
+                </div>
+
+                <div class="bet-form">
+                    <div>
+                        <label class="dep-label">Bet Amount (ETB)</label>
+                        <div class="keno-bet-row">
+                            <input type="number" class="keno-bet-input" id="kenoBetInput" value="10" min="5" max="500" placeholder="ETB">
+                        </div>
+                    </div>
+                    <div class="bet-quick-row">
+                        <button class="bet-quick" onclick="setKenoBet(5)">5</button>
+                        <button class="bet-quick" onclick="setKenoBet(10)">10</button>
+                        <button class="bet-quick" onclick="setKenoBet(25)">25</button>
+                        <button class="bet-quick" onclick="setKenoBet(50)">50</button>
+                        <button class="bet-quick" onclick="setKenoBet(100)">100</button>
+                    </div>
+                    <button class="keno-play-btn" id="kenoPlayBtn" onclick="playKeno()">🔢 Draw Keno</button>
+                </div>
+
+                <div class="keno-payout-table">
+                    <div class="pt-title">Payout Table</div>
+                    <div class="keno-payout-row"><span>3 hits</span><span>2x</span></div>
+                    <div class="keno-payout-row"><span>4 hits</span><span>4x</span></div>
+                    <div class="keno-payout-row"><span>5 hits</span><span>8x</span></div>
+                    <div class="keno-payout-row"><span>6 hits</span><span>16x</span></div>
+                    <div class="keno-payout-row"><span>7 hits</span><span>32x</span></div>
+                    <div class="keno-payout-row"><span>8 hits</span><span>64x</span></div>
+                    <div class="keno-payout-row"><span>9 hits</span><span>128x</span></div>
+                    <div class="keno-payout-row"><span>10 hits</span><span>256x</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HIGHER / LOWER SCREEN -->
+        <div class="hl-screen" id="screenHL">
+            <div class="game-header">
+                <button class="game-back" onclick="showTab('games')">← Back</button>
+                <div class="game-title">🃏 Higher / Lower</div>
+                <div class="game-balance-pill" id="hlBalancePill">0 ETB</div>
+            </div>
+            <div class="hl-body">
+                <div class="hl-cards-row">
+                    <div class="hl-card" id="hlCurrentCard">
+                        <div id="hlCurrentVal">?</div>
+                        <div class="card-label">Current</div>
+                    </div>
+                    <div class="hl-vs">VS</div>
+                    <div class="hl-card" id="hlNextCard">
+                        <div id="hlNextVal">?</div>
+                        <div class="card-label">Next</div>
+                    </div>
+                </div>
+
+                <div class="hl-result" id="hlResult">
+                    <div class="res-emoji" id="hlResultEmoji">🎉</div>
+                    <div class="res-title" id="hlResultTitle"></div>
+                    <div class="res-sub" id="hlResultSub"></div>
+                </div>
+
+                <div class="bet-form">
+                    <div>
+                        <label class="dep-label">Bet Amount (ETB)</label>
+                        <input type="number" class="dep-input" id="hlBetInput" value="10" min="5" max="500" placeholder="ETB">
+                    </div>
+                    <div class="bet-quick-row">
+                        <button class="bet-quick" onclick="setHLBet(5)">5</button>
+                        <button class="bet-quick" onclick="setHLBet(10)">10</button>
+                        <button class="bet-quick" onclick="setHLBet(25)">25</button>
+                        <button class="bet-quick" onclick="setHLBet(50)">50</button>
+                        <button class="bet-quick" onclick="setHLBet(100)">100</button>
+                    </div>
+                    <div class="hl-btn-row">
+                        <button class="hl-btn-h" id="hlBtnHigher" onclick="playHL('higher')">📈 Higher</button>
+                        <button class="hl-btn-l" id="hlBtnLower" onclick="playHL('lower')">📉 Lower</button>
+                    </div>
+                </div>
+
+                <div class="keno-payout-table">
+                    <div class="pt-title">Odds</div>
+                    <div class="keno-payout-row"><span>Correct guess</span><span>1.9x</span></div>
+                    <div class="keno-payout-row"><span>Equal cards</span><span>Loss (Push)</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AVIATOR SCREEN -->
+        <div class="aviator-screen" id="screenAviator">
+            <div class="game-header">
+                <button class="game-back" onclick="showTab('games')">← Back</button>
+                <div class="game-title">✈️ Aviator</div>
+                <div class="game-balance-pill" id="aviBalancePill">0 ETB</div>
+            </div>
+            <div class="aviator-body">
+                <div class="aviator-display" id="aviDisplay">
+                    <div class="plane-emoji" id="aviPlane">✈️</div>
+                    <div class="multiplier-display" id="aviMultiplier">1.00x</div>
+                    <div class="avi-status" id="aviStatus">Place your bet and watch the plane fly!</div>
+                    <div class="avi-trail"></div>
+                </div>
+
+                <div class="avi-result" id="aviResult">
+                    <div class="res-emoji" id="aviResultEmoji">✈️</div>
+                    <div class="res-title" id="aviResultTitle"></div>
+                    <div class="res-sub" id="aviResultSub"></div>
+                </div>
+
+                <div class="cashout-slider-wrap">
+                    <div class="cashout-slider-label">
+                        <span>Auto Cash-out at:</span>
+                        <span id="cashoutVal">2.00x</span>
+                    </div>
+                    <input type="range" class="cashout-slider" id="cashoutSlider" min="1.1" max="10" step="0.1" value="2.0" oninput="updateCashoutLabel(this.value)">
+                </div>
+
+                <div class="bet-form">
+                    <div>
+                        <label class="dep-label">Bet Amount (ETB)</label>
+                        <input type="number" class="dep-input" id="aviBetInput" value="10" min="5" max="1000" placeholder="ETB">
+                    </div>
+                    <div class="bet-quick-row">
+                        <button class="bet-quick" onclick="setAviBet(5)">5</button>
+                        <button class="bet-quick" onclick="setAviBet(10)">10</button>
+                        <button class="bet-quick" onclick="setAviBet(50)">50</button>
+                        <button class="bet-quick" onclick="setAviBet(100)">100</button>
+                        <button class="bet-quick" onclick="setAviBet(500)">500</button>
+                    </div>
+                    <button class="avi-play-btn" id="aviPlayBtn" onclick="playAviator()">✈️ Fly!</button>
+                </div>
+
+                <div class="avi-history">
+                    <div class="avi-history-title">Recent Crashes</div>
+                    <div class="avi-history-pills" id="aviHistoryPills">
+                        <span class="avi-pill safe">2.14x</span>
+                        <span class="avi-pill crash">1.00x</span>
+                        <span class="avi-pill safe">3.55x</span>
+                        <span class="avi-pill crash">1.23x</span>
+                        <span class="avi-pill safe">5.01x</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WALLET SCREEN -->
+        <div class="wallet-screen" id="screenWallet">
+            <div class="wallet-body">
+                <div class="wallet-balance-card">
+                    <div class="wb-label">Your Balance</div>
+                    <div class="wb-amount" id="walletBalanceAmount">0</div>
+                    <div class="wb-currency">Ethiopian Birr (ETB)</div>
+                    <div class="wb-actions">
+                        <button class="wb-btn wb-btn-dep" onclick="showDepositModal()">💳 Deposit</button>
+                        <button class="wb-btn wb-btn-wd" onclick="showWithdrawModal()">💸 Withdraw</button>
+                    </div>
+                </div>
+
+                <div class="tx-section">
+                    <div class="tx-section-title">Transaction History</div>
+                    <div id="txList"><div class="tx-empty">Loading...</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DEPOSIT MODAL -->
+        <div class="deposit-modal-overlay" id="depositModal">
+            <div class="dep-modal">
+                <h3>💳 Add Funds</h3>
+                <div class="dep-tabs">
+                    <button class="dep-tab active" id="depTabChapa" onclick="switchDepTab('chapa')">Chapa Pay</button>
+                    <button class="dep-tab" id="depTabManual" onclick="switchDepTab('manual')">Manual Transfer</button>
+                </div>
+
+                <!-- Chapa tab -->
+                <div id="depFormChapa" class="dep-form">
+                    <div>
+                        <label class="dep-label">Amount (ETB) – minimum 10</label>
+                        <input type="number" class="dep-input" id="chapaAmountInput" min="10" placeholder="e.g. 100">
+                    </div>
+                    <button class="dep-submit-btn" id="chapaPayBtn" onclick="initChapaDeposit()">🚀 Pay with Chapa (Telebirr / CBE / Dashen)</button>
+                    <div style="font-size:11px;color:var(--text2);text-align:center;">You will be redirected to Chapa's secure payment page</div>
+                    <button class="dep-cancel-btn" onclick="closeDepositModal()">Cancel</button>
+                </div>
+
+                <!-- Manual tab -->
+                <div id="depFormManual" class="dep-form" style="display:none;">
+                    <div class="section-title" style="margin:0 0 6px;"><div class="dot"></div> Send to any of these accounts:</div>
+                    <div class="manual-info-card">
+                        <div class="manual-info-row">
+                            <div><div class="mir-label">📱 Telebirr</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="telebirrNum">0936719379</div></div>
+                            <button class="mir-copy" onclick="copyManual('0936719379', this)">Copy</button>
+                        </div>
+                        <div class="manual-info-row">
+                            <div><div class="mir-label">🏦 Dashen Bank</div><div style="font-size:12px;font-weight:700;font-family:monospace;">5236271359011</div></div>
+                            <button class="mir-copy" onclick="copyManual('5236271359011', this)">Copy</button>
+                        </div>
+                        <div class="manual-info-row">
+                            <div><div class="mir-label">🏦 CBE</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="cbeNum">Not available</div></div>
+                            <span style="font-size:10px;color:var(--text2);">—</span>
+                        </div>
+                        <div class="manual-info-row">
+                            <div><div class="mir-label">👤 Name</div><div style="font-size:12px;font-weight:700;">Alazar Sisay</div></div>
+                            <button class="mir-copy" onclick="copyManual('Alazar Sisay', this)">Copy</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="dep-label">Amount Sent (ETB)</label>
+                        <input type="number" class="dep-input" id="manualAmountInput" min="10" placeholder="e.g. 100">
+                    </div>
+                    <div>
+                        <label class="dep-label">Payment Method</label>
+                        <div class="dep-method-grid">
+                            <button class="dep-method-btn active" id="manMethTelebirr" onclick="selectManualMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
+                            <button class="dep-method-btn" id="manMethDashen" onclick="selectManualMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
+                            <button class="dep-method-btn" id="manMethCBE" onclick="selectManualMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="dep-label">Upload Payment Receipt</label>
+                        <div class="screenshot-zone" id="depScreenshotZone" onclick="document.getElementById('depFileInput').click()">
+                            <div class="sz-icon" id="depZoneIcon">📤</div>
+                            <div class="sz-text" id="depZoneText">Tap to upload screenshot</div>
+                        </div>
+                        <input type="file" id="depFileInput" accept="image/*" style="display:none;" onchange="handleDepFile(event)">
+                    </div>
+                    <button class="dep-submit-btn" id="manualDepBtn" onclick="submitManualDeposit()">📨 Submit for Review</button>
+                    <button class="dep-cancel-btn" onclick="closeDepositModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- WITHDRAW MODAL -->
+        <div class="withdraw-modal-overlay" id="withdrawModal">
+            <div class="wd-modal">
+                <h3>💸 Withdraw Funds</h3>
+                <div class="dep-form" id="wdForm">
+                    <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px;font-size:12px;color:var(--accent);">
+                        Minimum withdrawal: 50 ETB • Processed within 24 hours
+                    </div>
+                    <div>
+                        <label class="dep-label">Amount (ETB)</label>
+                        <input type="number" class="dep-input" id="wdAmountInput" min="50" placeholder="e.g. 100">
+                    </div>
+                    <div>
+                        <label class="dep-label">Payment Method</label>
+                        <div class="dep-method-grid">
+                            <button class="dep-method-btn active" id="wdMethTelebirr" onclick="selectWdMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
+                            <button class="dep-method-btn" id="wdMethDashen" onclick="selectWdMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
+                            <button class="dep-method-btn" id="wdMethCBE" onclick="selectWdMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="dep-label">Your Account Number</label>
+                        <input type="text" class="dep-input" id="wdAccountNum" placeholder="e.g. 0911234567">
+                    </div>
+                    <div>
+                        <label class="dep-label">Account Holder Name</label>
+                        <input type="text" class="dep-input" id="wdAccountName" placeholder="e.g. Abebe Kebede">
+                    </div>
+                    <button class="dep-submit-btn" id="wdSubmitBtn" onclick="submitWithdrawal()">💸 Request Withdrawal</button>
+                    <button class="dep-cancel-btn" onclick="closeWithdrawModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <div class="bottom-nav">
-            <button class="nav-btn active" onclick="showTab('home')">
+            <button class="nav-btn active" onclick="showTab('home')" id="navHome">
                 <span class="icon">🎫</span><span>Buy</span>
             </button>
-            <button class="nav-btn" onclick="showTab('draw')">
+            <button class="nav-btn" onclick="showTab('games')" id="navGames">
+                <span class="icon">🎮</span><span>Games</span>
+            </button>
+            <button class="nav-btn" onclick="showTab('wallet')" id="navWallet">
+                <span class="icon">💰</span><span>Wallet</span>
+            </button>
+            <button class="nav-btn" onclick="showTab('draw')" id="navDraw">
                 <span class="icon">🎲</span><span>Draw</span>
             </button>
-            <button class="nav-btn" onclick="showTab('winners')">
-                <span class="icon">🏆</span><span>Win</span>
-            </button>
-            <button class="nav-btn" onclick="showTab('rules')">
-                <span class="icon">📋</span><span>Rules</span>
+            <button class="nav-btn" onclick="showTab('rules')" id="navRules">
+                <span class="icon">📋</span><span>Info</span>
             </button>
         </div>
     </div>
@@ -1226,12 +1794,15 @@
             // Show user info in header
             const name = currentUser.fullName || currentUser.email || 'Player';
             document.getElementById('headerUserName').textContent = name.split(' ')[0];
-            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0) + ' ETB';
+            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0).toLocaleString() + ' ETB';
             document.getElementById('userInfoBar').classList.add('show');
             // Update admin state from server
             isAdmin = currentUser.isAdmin === true;
             updateAdminToggleVisibility();
             checkSendReady();
+            updateGameBalancePills();
+            // Set wallet balance display
+            document.getElementById('walletBalanceAmount').textContent = (currentUser.balance || 0).toLocaleString();
         }
 
         function updateAdminToggleVisibility() {
@@ -1240,11 +1811,7 @@
         }
 
         function showUserMenu() {
-            const name = currentUser ? (currentUser.fullName || currentUser.email) : '';
-            const balance = currentUser ? currentUser.balance || 0 : 0;
-            if (confirm(`👤 ${name}\n💰 Balance: ${balance} ETB\n\nSign out?`)) {
-                doLogout();
-            }
+            showTab('wallet');
         }
 
         async function doLogout() {
@@ -1770,13 +2337,32 @@
         }
 
         function showTab(tab) {
-            document.querySelectorAll('.screen, .draw-screen, .winners-screen, .rules-screen').forEach(s => s.classList.remove('active'));
+            // Hide all screens
+            document.querySelectorAll('.screen, .draw-screen, .winners-screen, .rules-screen, .games-screen, .keno-screen, .hl-screen, .aviator-screen, .wallet-screen').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            const map = { home: 0, draw: 1, winners: 2, rules: 3 };
-            const ids = { home: 'screenHome', draw: 'screenDraw', winners: 'screenWinners', rules: 'screenRules' };
-            document.getElementById(ids[tab]).classList.add('active');
-            document.querySelectorAll('.nav-btn')[map[tab]].classList.add('active');
+
+            const navMap = {
+                home: 'navHome', games: 'navGames', keno: 'navGames', higher_lower: 'navGames',
+                aviator: 'navGames', wallet: 'navWallet', draw: 'navDraw', winners: 'navDraw', rules: 'navRules'
+            };
+            const screenMap = {
+                home: 'screenHome', games: 'screenGames', keno: 'screenKeno', higher_lower: 'screenHL',
+                aviator: 'screenAviator', wallet: 'screenWallet', draw: 'screenDraw',
+                winners: 'screenWinners', rules: 'screenRules'
+            };
+
+            const screenEl = document.getElementById(screenMap[tab]);
+            if (screenEl) screenEl.classList.add('active');
+            const navEl = document.getElementById(navMap[tab]);
+            if (navEl) navEl.classList.add('active');
             playSound('tap');
+
+            // Tab-specific init
+            if (tab === 'wallet') loadWallet();
+            if (tab === 'games') updateGameBalancePills();
+            if (tab === 'keno') { updateGameBalancePills(); initKenoGrid(); }
+            if (tab === 'higher_lower') { updateGameBalancePills(); initHLCard(); }
+            if (tab === 'aviator') updateGameBalancePills();
         }
 
         function startDraw() {
@@ -1942,6 +2528,561 @@
             .catch(() => showToast('❌ Could not copy results.'));
     }
 }
+
+        // ===== GAME BALANCE HELPERS =====
+        function updateGameBalancePills() {
+            const bal = currentUser ? (currentUser.balance || 0) : 0;
+            const fmt = bal.toLocaleString() + ' ETB';
+            ['kenoBalancePill','hlBalancePill','aviBalancePill'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = fmt;
+            });
+            const lbWarn = document.getElementById('gamesLowBalance');
+            if (lbWarn) lbWarn.classList.toggle('show', bal < 10 && !!currentUser);
+        }
+
+        async function refreshBalance() {
+            if (!AUTH_TOKEN) return;
+            try {
+                const resp = await fetch('/api/balance', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Balance');
+                if (resp.ok && data && data.ok) {
+                    if (currentUser) currentUser.balance = data.balance;
+                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
+                    document.getElementById('walletBalanceAmount').textContent = data.balance.toLocaleString();
+                    updateGameBalancePills();
+                }
+            } catch (_e) { /* silent */ }
+        }
+
+        // ===== KENO GAME =====
+        let kenoPicked = new Set();
+        let kenoPlaying = false;
+
+        function initKenoGrid() {
+            const grid = document.getElementById('kenoGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            kenoPicked.clear();
+            updateKenoPicked();
+            for (let i = 1; i <= 80; i++) {
+                const ball = document.createElement('div');
+                ball.className = 'keno-ball';
+                ball.textContent = i;
+                ball.id = `kb-${i}`;
+                ball.onclick = () => toggleKenoBall(i);
+                grid.appendChild(ball);
+            }
+            document.getElementById('kenoHits').textContent = '-';
+            document.getElementById('kenoMultiplier').textContent = '-';
+            document.getElementById('kenoPayout').textContent = '-';
+            document.getElementById('kenoResultBanner').style.display = 'none';
+        }
+
+        function toggleKenoBall(n) {
+            if (kenoPlaying) return;
+            if (kenoPicked.has(n)) {
+                kenoPicked.delete(n);
+                document.getElementById(`kb-${n}`).classList.remove('picked');
+            } else {
+                if (kenoPicked.size >= 10) { showToast('Max 10 picks!'); return; }
+                kenoPicked.add(n);
+                document.getElementById(`kb-${n}`).classList.add('picked');
+            }
+            playSound('tap');
+            updateKenoPicked();
+        }
+
+        function updateKenoPicked() {
+            document.getElementById('kenoPicked').textContent = kenoPicked.size;
+        }
+
+        function setKenoBet(val) { document.getElementById('kenoBetInput').value = val; }
+
+        async function playKeno() {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            if (kenoPicked.size < 1) { showToast('Pick at least 1 number'); return; }
+            const bet = Number(document.getElementById('kenoBetInput').value);
+            if (!bet || bet < 5) { showToast('Minimum bet is 5 ETB'); return; }
+
+            const btn = document.getElementById('kenoPlayBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Drawing...';
+            kenoPlaying = true;
+
+            try {
+                const resp = await fetch('/api/games/bet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify({ game: 'keno', bet_amount: bet, picks: [...kenoPicked] })
+                });
+                const data = await readJsonResponse(resp, 'Keno bet');
+                if (!resp.ok || !data || !data.ok) {
+                    showToast('❌ ' + (data?.error || 'Bet failed'));
+                    return;
+                }
+                const res = data.result;
+                // Animate drawn balls
+                // First clear all drawn state
+                document.querySelectorAll('.keno-ball').forEach(b => {
+                    b.classList.remove('drawn', 'hit');
+                    if (kenoPicked.has(Number(b.textContent))) b.classList.add('picked');
+                });
+                // Animate drawing numbers
+                let i = 0;
+                const drawInterval = setInterval(() => {
+                    if (i >= res.drawn.length) { clearInterval(drawInterval); showKenoResult(res, bet, data.balance); return; }
+                    const n = res.drawn[i];
+                    const ball = document.getElementById(`kb-${n}`);
+                    if (ball) {
+                        if (kenoPicked.has(n)) ball.classList.add('hit');
+                        else ball.classList.add('drawn');
+                    }
+                    if (i % 5 === 0) playSound('tap');
+                    i++;
+                }, 80);
+
+                if (data.balance !== null && data.balance !== undefined) {
+                    if (currentUser) currentUser.balance = data.balance;
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔢 Draw Keno';
+                kenoPlaying = false;
+            }
+        }
+
+        function showKenoResult(res, bet, newBalance) {
+            document.getElementById('kenoHits').textContent = res.hits;
+            document.getElementById('kenoMultiplier').textContent = res.multiplier + 'x';
+            document.getElementById('kenoPayout').textContent = res.payout > 0 ? res.payout + ' ETB' : '0';
+            const banner = document.getElementById('kenoResultBanner');
+            banner.style.display = 'block';
+            if (res.payout > 0) {
+                banner.className = 'keno-result-banner win';
+                document.getElementById('kenoResultTitle').textContent = '🎉 You Won ' + res.payout + ' ETB!';
+                document.getElementById('kenoResultSub').textContent = res.hits + ' hits · ' + res.multiplier + 'x multiplier';
+                playSound('win');
+                createConfetti();
+            } else {
+                banner.className = 'keno-result-banner loss';
+                document.getElementById('kenoResultTitle').textContent = '😔 No Win This Time';
+                document.getElementById('kenoResultSub').textContent = res.hits + ' hits · Better luck next time!';
+                playSound('error');
+            }
+            if (newBalance !== null && newBalance !== undefined) {
+                if (currentUser) currentUser.balance = newBalance;
+                document.getElementById('headerUserBalance').textContent = newBalance.toLocaleString() + ' ETB';
+                updateGameBalancePills();
+            }
+        }
+
+        // ===== HIGHER / LOWER GAME =====
+        const CARD_NAMES = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+        let hlPlaying = false;
+        let hlCurrentCardVal = null;
+
+        function initHLCard() {
+            hlCurrentCardVal = Math.floor(Math.random() * 13) + 1;
+            const el = document.getElementById('hlCurrentVal');
+            if (el) el.textContent = CARD_NAMES[hlCurrentCardVal];
+            const nextEl = document.getElementById('hlNextVal');
+            if (nextEl) nextEl.textContent = '?';
+            document.getElementById('hlCurrentCard').className = 'hl-card revealed';
+            document.getElementById('hlNextCard').className = 'hl-card';
+            const res = document.getElementById('hlResult');
+            if (res) res.className = 'hl-result';
+            document.getElementById('hlBtnHigher').disabled = false;
+            document.getElementById('hlBtnLower').disabled = false;
+        }
+
+        function setHLBet(val) { document.getElementById('hlBetInput').value = val; }
+
+        async function playHL(guess) {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            if (hlPlaying) return;
+            const bet = Number(document.getElementById('hlBetInput').value);
+            if (!bet || bet < 5) { showToast('Minimum bet is 5 ETB'); return; }
+
+            hlPlaying = true;
+            document.getElementById('hlBtnHigher').disabled = true;
+            document.getElementById('hlBtnLower').disabled = true;
+
+            try {
+                const resp = await fetch('/api/games/bet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify({ game: 'higher_lower', bet_amount: bet, guess, prev_card: hlCurrentCardVal })
+                });
+                const data = await readJsonResponse(resp, 'HL bet');
+                if (!resp.ok || !data || !data.ok) {
+                    showToast('❌ ' + (data?.error || 'Bet failed'));
+                    document.getElementById('hlBtnHigher').disabled = false;
+                    document.getElementById('hlBtnLower').disabled = false;
+                    hlPlaying = false;
+                    return;
+                }
+                const res = data.result;
+                // Reveal next card
+                document.getElementById('hlCurrentVal').textContent = CARD_NAMES[res.prev_card];
+                document.getElementById('hlNextVal').textContent = CARD_NAMES[res.next_card];
+                document.getElementById('hlCurrentCard').className = 'hl-card revealed';
+                const nextCard = document.getElementById('hlNextCard');
+
+                const resultDiv = document.getElementById('hlResult');
+                if (res.won) {
+                    nextCard.className = 'hl-card win-card';
+                    resultDiv.className = 'hl-result win show';
+                    document.getElementById('hlResultEmoji').textContent = '🎉';
+                    document.getElementById('hlResultTitle').textContent = 'You Won ' + res.payout + ' ETB!';
+                    document.getElementById('hlResultSub').textContent = guess.toUpperCase() + ' was correct!';
+                    playSound('win');
+                    createConfetti();
+                } else {
+                    nextCard.className = 'hl-card lose-card';
+                    resultDiv.className = 'hl-result loss show';
+                    document.getElementById('hlResultEmoji').textContent = '😔';
+                    document.getElementById('hlResultTitle').textContent = 'Better Luck Next Time';
+                    document.getElementById('hlResultSub').textContent = 'Card was ' + CARD_NAMES[res.next_card] + ' (' + res.actual + ')';
+                    playSound('error');
+                }
+
+                if (data.balance !== null && data.balance !== undefined) {
+                    if (currentUser) currentUser.balance = data.balance;
+                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
+                    updateGameBalancePills();
+                }
+
+                // Auto next round
+                setTimeout(() => { initHLCard(); hlPlaying = false; }, 2000);
+            } catch (_e) {
+                showToast('❌ Network error');
+                hlPlaying = false;
+                document.getElementById('hlBtnHigher').disabled = false;
+                document.getElementById('hlBtnLower').disabled = false;
+            }
+        }
+
+        // ===== AVIATOR GAME =====
+        let aviHistory = [];
+        let aviAnimating = false;
+
+        function updateCashoutLabel(val) {
+            document.getElementById('cashoutVal').textContent = Number(val).toFixed(2) + 'x';
+        }
+
+        function setAviBet(val) { document.getElementById('aviBetInput').value = val; }
+
+        async function playAviator() {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            if (aviAnimating) return;
+            const bet = Number(document.getElementById('aviBetInput').value);
+            if (!bet || bet < 5) { showToast('Minimum bet is 5 ETB'); return; }
+            const cashout = Number(document.getElementById('cashoutSlider').value);
+
+            aviAnimating = true;
+            const btn = document.getElementById('aviPlayBtn');
+            btn.disabled = true;
+            btn.textContent = '✈️ Flying...';
+
+            // Animate the multiplier going up
+            const multEl = document.getElementById('aviMultiplier');
+            const statusEl = document.getElementById('aviStatus');
+            const planeEl = document.getElementById('aviPlane');
+            const resultDiv = document.getElementById('aviResult');
+            resultDiv.className = 'avi-result';
+            multEl.className = 'multiplier-display going';
+            planeEl.className = 'plane-emoji flying';
+            statusEl.textContent = 'Flying... cash out before it crashes!';
+
+            let displayMult = 1.0;
+            const animInterval = setInterval(() => {
+                displayMult += displayMult * 0.03;
+                multEl.textContent = displayMult.toFixed(2) + 'x';
+                if (displayMult >= cashout + 0.5) {
+                    clearInterval(animInterval);
+                }
+            }, 80);
+
+            try {
+                const resp = await fetch('/api/games/bet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify({ game: 'aviator', bet_amount: bet, cashout_at: cashout })
+                });
+                const data = await readJsonResponse(resp, 'Aviator bet');
+                clearInterval(animInterval);
+
+                if (!resp.ok || !data || !data.ok) {
+                    showToast('❌ ' + (data?.error || 'Bet failed'));
+                    multEl.className = 'multiplier-display';
+                    planeEl.className = 'plane-emoji';
+                    btn.disabled = false;
+                    btn.textContent = '✈️ Fly!';
+                    aviAnimating = false;
+                    return;
+                }
+
+                const res = data.result;
+
+                // Add to history
+                aviHistory.unshift(res.crash_at);
+                if (aviHistory.length > 10) aviHistory.pop();
+                renderAviHistory();
+
+                multEl.textContent = res.crash_at.toFixed(2) + 'x';
+                statusEl.textContent = 'Crashed at ' + res.crash_at.toFixed(2) + 'x';
+                planeEl.className = 'plane-emoji';
+
+                if (res.won) {
+                    multEl.className = 'multiplier-display going';
+                    resultDiv.className = 'avi-result win show';
+                    document.getElementById('aviResultEmoji').textContent = '🎉';
+                    document.getElementById('aviResultTitle').textContent = 'Cashed Out! +'  + res.payout + ' ETB';
+                    document.getElementById('aviResultSub').textContent = 'You cashed out at ' + cashout.toFixed(2) + 'x before crash at ' + res.crash_at.toFixed(2) + 'x';
+                    playSound('win');
+                    createConfetti();
+                } else {
+                    multEl.className = 'multiplier-display crashed';
+                    resultDiv.className = 'avi-result loss show';
+                    document.getElementById('aviResultEmoji').textContent = '💥';
+                    document.getElementById('aviResultTitle').textContent = 'Crashed! -' + bet + ' ETB';
+                    document.getElementById('aviResultSub').textContent = 'Crashed at ' + res.crash_at.toFixed(2) + 'x · Your target was ' + cashout.toFixed(2) + 'x';
+                    playSound('error');
+                }
+
+                if (data.balance !== null && data.balance !== undefined) {
+                    if (currentUser) currentUser.balance = data.balance;
+                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
+                    updateGameBalancePills();
+                }
+            } catch (_e) {
+                clearInterval(animInterval);
+                showToast('❌ Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✈️ Fly!';
+                aviAnimating = false;
+            }
+        }
+
+        function renderAviHistory() {
+            const pills = document.getElementById('aviHistoryPills');
+            if (!pills) return;
+            pills.innerHTML = '';
+            aviHistory.forEach(c => {
+                const p = document.createElement('span');
+                p.className = 'avi-pill ' + (c >= 2.0 ? 'safe' : 'crash');
+                p.textContent = c.toFixed(2) + 'x';
+                pills.appendChild(p);
+            });
+        }
+
+        // ===== WALLET / DEPOSIT / WITHDRAWAL =====
+        async function loadWallet() {
+            await refreshBalance();
+            loadTransactions();
+        }
+
+        async function loadTransactions() {
+            const list = document.getElementById('txList');
+            if (!list || !AUTH_TOKEN) return;
+            list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            try {
+                const resp = await fetch('/api/transactions?limit=20', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Transactions');
+                if (!resp.ok || !data || !data.ok) {
+                    list.innerHTML = '<div class="tx-empty">Failed to load transactions</div>';
+                    return;
+                }
+                if (!data.transactions || data.transactions.length === 0) {
+                    list.innerHTML = '<div class="tx-empty">No transactions yet</div>';
+                    return;
+                }
+                list.innerHTML = '';
+                data.transactions.forEach(tx => {
+                    const typeIcon = { deposit: '💳', withdrawal: '💸', withdrawal_refund: '↩️', game_win: '🎮', game_loss: '🎮' };
+                    const isPos = tx.amount > 0;
+                    const el = document.createElement('div');
+                    el.className = 'tx-item';
+                    el.innerHTML = `
+                        <div class="tx-icon ${tx.type}">${typeIcon[tx.type] || '💰'}</div>
+                        <div class="tx-info">
+                            <div class="tx-desc">${tx.description || tx.type}</div>
+                            <div class="tx-date">${new Date(tx.created_at).toLocaleDateString('en-ET', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                        </div>
+                        <div class="tx-amount ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${tx.amount} ETB</div>
+                    `;
+                    list.appendChild(el);
+                });
+            } catch (_e) {
+                list.innerHTML = '<div class="tx-empty">Error loading transactions</div>';
+            }
+        }
+
+        function showDepositModal() {
+            document.getElementById('depositModal').classList.add('active');
+        }
+
+        function closeDepositModal() {
+            document.getElementById('depositModal').classList.remove('active');
+            depScreenshotFile = null;
+            document.getElementById('depFileInput').value = '';
+            document.getElementById('depZoneIcon').textContent = '📤';
+            document.getElementById('depZoneText').textContent = 'Tap to upload screenshot';
+            document.getElementById('depScreenshotZone').classList.remove('has-file');
+        }
+
+        function showWithdrawModal() {
+            document.getElementById('withdrawModal').classList.add('active');
+        }
+
+        function closeWithdrawModal() {
+            document.getElementById('withdrawModal').classList.remove('active');
+        }
+
+        let activeDepTab = 'chapa';
+        function switchDepTab(tab) {
+            activeDepTab = tab;
+            document.getElementById('depTabChapa').classList.toggle('active', tab === 'chapa');
+            document.getElementById('depTabManual').classList.toggle('active', tab === 'manual');
+            document.getElementById('depFormChapa').style.display = tab === 'chapa' ? 'flex' : 'none';
+            document.getElementById('depFormManual').style.display = tab === 'manual' ? 'flex' : 'none';
+        }
+
+        let selectedManualMethod = 'telebirr';
+        function selectManualMethod(m) {
+            selectedManualMethod = m;
+            ['telebirr','dashen','cbe'].forEach(id => {
+                document.getElementById('manMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
+            });
+        }
+
+        let selectedWdMethod = 'telebirr';
+        function selectWdMethod(m) {
+            selectedWdMethod = m;
+            ['telebirr','dashen','cbe'].forEach(id => {
+                document.getElementById('wdMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
+            });
+        }
+
+        let depScreenshotFile = null;
+        function handleDepFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            depScreenshotFile = file;
+            document.getElementById('depZoneIcon').textContent = '✅';
+            document.getElementById('depZoneText').textContent = file.name;
+            document.getElementById('depScreenshotZone').classList.add('has-file');
+        }
+
+        async function initChapaDeposit() {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); closeDepositModal(); showAuthOverlay(); return; }
+            const amount = Number(document.getElementById('chapaAmountInput').value);
+            if (!amount || amount < 10) { showToast('Minimum deposit is 10 ETB'); return; }
+            const btn = document.getElementById('chapaPayBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Initializing...';
+            try {
+                const resp = await fetch('/api/deposits/initialize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify({ amount, return_url: window.location.href })
+                });
+                const data = await readJsonResponse(resp, 'Chapa init');
+                if (resp.ok && data && data.ok && data.checkout_url) {
+                    window.location.href = data.checkout_url;
+                } else {
+                    showToast('❌ ' + (data?.error || 'Payment init failed'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Pay with Chapa (Telebirr / CBE / Dashen)';
+            }
+        }
+
+        async function submitManualDeposit() {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            const amount = Number(document.getElementById('manualAmountInput').value);
+            if (!amount || amount < 10) { showToast('Minimum deposit is 10 ETB'); return; }
+            if (!depScreenshotFile) { showToast('Please upload payment receipt'); return; }
+
+            const btn = document.getElementById('manualDepBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Submitting...';
+
+            try {
+                const fd = new FormData();
+                fd.append('amount', amount);
+                fd.append('payment_method', selectedManualMethod);
+                fd.append('screenshot', depScreenshotFile);
+                const resp = await fetch('/api/deposits/manual', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: fd
+                });
+                const data = await readJsonResponse(resp, 'Manual deposit');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ Deposit submitted! Admin will confirm shortly.');
+                    closeDepositModal();
+                } else {
+                    showToast('❌ ' + (data?.error || 'Submission failed'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📨 Submit for Review';
+            }
+        }
+
+        async function submitWithdrawal() {
+            if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            const amount = Number(document.getElementById('wdAmountInput').value);
+            if (!amount || amount < 50) { showToast('Minimum withdrawal is 50 ETB'); return; }
+            const account_number = document.getElementById('wdAccountNum').value.trim();
+            const account_name = document.getElementById('wdAccountName').value.trim();
+            if (!account_number || !account_name) { showToast('Account number and name are required'); return; }
+
+            const btn = document.getElementById('wdSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Submitting...';
+
+            try {
+                const resp = await fetch('/api/withdrawals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify({ amount, payment_method: selectedWdMethod, account_number, account_name })
+                });
+                const data = await readJsonResponse(resp, 'Withdrawal');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ Withdrawal requested! Will be processed in 24h.');
+                    closeWithdrawModal();
+                    refreshBalance();
+                } else {
+                    showToast('❌ ' + (data?.error || 'Request failed'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💸 Request Withdrawal';
+            }
+        }
+
+        function copyManual(text, btn) {
+            copyToClipboard(text)
+                .then(() => { btn.textContent = '✓'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500); })
+                .catch(() => showToast('Copied: ' + text));
+        }
+
+        // Close modals on overlay click
+        document.getElementById('depositModal').addEventListener('click', function(e) { if (e.target === this) closeDepositModal(); });
+        document.getElementById('withdrawModal').addEventListener('click', function(e) { if (e.target === this) closeWithdrawModal(); });
 
         initTier('standard');
         initAuthState();

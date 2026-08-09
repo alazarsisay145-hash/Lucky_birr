@@ -533,3 +533,143 @@ test('GET /readyz includes detail field when Supabase is not configured', async 
     await stopServer(server, getStderr);
   }
 });
+
+// ===== NEW ROUTE SMOKE TESTS =====
+
+test('POST /api/deposits/initialize returns 401 without token', async () => {
+  const port = 3126;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/deposits/initialize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 100 })
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/deposits/manual returns 401 without token', async () => {
+  const port = 3127;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/deposits/manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 100 })
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/withdrawals returns 401 without token', async () => {
+  const port = 3128;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/withdrawals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 100 })
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/games/bet returns 401 without token', async () => {
+  const port = 3129;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/games/bet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game: 'keno', bet_amount: 10 })
+    });
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /api/transactions returns 401 without token', async () => {
+  const port = 3130;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/transactions`);
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('GET /api/balance returns 401 without token', async () => {
+  const port = 3131;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/api/balance`);
+    assert.equal(response.status, 401);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('POST /api/games/bet returns 400 for invalid game name', async () => {
+  const port = 3132;
+  const jwtSecret = 'test-jwt-secret-32-chars-exactly!!';
+  const server = require('node:child_process').spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'test', JWT_SECRET: jwtSecret },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  try {
+    await wait(1200);
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign({ id: 'test-id', email: 'user@example.com' }, jwtSecret, { expiresIn: '1h' });
+    const response = await fetch(`http://127.0.0.1:${port}/api/games/bet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ game: 'unknown_game', bet_amount: 10 })
+    });
+    assert.equal(response.status, 400);
+    const data = await response.json();
+    assert.ok(data.error, 'error field should be present');
+  } finally {
+    server.kill('SIGTERM');
+    await Promise.race([
+      new Promise((resolve) => server.once('exit', resolve)),
+      wait(2000)
+    ]);
+  }
+});
+
+test('game shell includes games lobby, keno, higher/lower and aviator screens', () => {
+  const html = readGameShell();
+  assert.match(html, /screenGames/);
+  assert.match(html, /screenKeno/);
+  assert.match(html, /screenHL/);
+  assert.match(html, /screenAviator/);
+  assert.match(html, /screenWallet/);
+  assert.match(html, /playKeno/);
+  assert.match(html, /playAviator/);
+  assert.match(html, /Higher \/ Lower/);
+});
+
+test('game shell includes deposit and withdrawal modals', () => {
+  const html = readGameShell();
+  assert.match(html, /depositModal/);
+  assert.match(html, /withdrawModal/);
+  assert.match(html, /initChapaDeposit/);
+  assert.match(html, /submitManualDeposit/);
+  assert.match(html, /submitWithdrawal/);
+});

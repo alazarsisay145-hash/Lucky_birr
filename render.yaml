@@ -50,6 +50,12 @@ services:
       - key: ADMIN_CHAT_ID
         sync: false
 
+      # ----- Chapa payment gateway [REQUIRED for deposits/withdrawals] -----
+      - key: CHAPA_SECRET_KEY
+        sync: false          # Get your secret key from https://dashboard.chapa.co
+      - key: CHAPA_WEBHOOK_SECRET
+        sync: false          # Set in Chapa dashboard under Webhooks; used to verify callbacks
+
       # ----- Telegram inbound webhook [optional] -----
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false

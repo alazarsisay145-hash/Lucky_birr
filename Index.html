@@ -1643,10 +1643,26 @@
             checkSendReady();
         }
 
-        function setAuthSetupStatus(message) {
+        function setAuthButtonsDisabled(disabled) {
+            const loginBtn = document.getElementById('loginBtn');
+            const registerBtn = document.getElementById('registerBtn');
+            if (loginBtn) loginBtn.disabled = disabled;
+            if (registerBtn) registerBtn.disabled = disabled;
+        }
+
+        function setAuthSetupStatus(message, disableButtons) {
             const el = document.getElementById('authSetupStatus');
-            el.textContent = message;
+            el.textContent = '';
+            if (message) {
+                el.appendChild(document.createTextNode(message));
+                const retryBtn = document.createElement('button');
+                retryBtn.textContent = 'Retry';
+                retryBtn.onclick = loadAuthSetupStatus;
+                retryBtn.setAttribute('style', 'margin-left:8px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.5);color:#fde68a;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px;');
+                el.appendChild(retryBtn);
+            }
             el.classList.toggle('show', !!message);
+            setAuthButtonsDisabled(!!disableButtons);
         }
 
         function formatBlockerList(items) {
@@ -1660,11 +1676,11 @@
                 const resp = await fetch('/readyz', { cache: 'no-store' });
                 const data = await readJsonResponse(resp, 'Ready status');
                 if (resp.ok) {
-                    setAuthSetupStatus('');
+                    setAuthSetupStatus('', false);
                     return;
                 }
                 if (!data || typeof data !== 'object') {
-                    setAuthSetupStatus('Registration and sign-in are temporarily unavailable.');
+                    setAuthSetupStatus('Registration and sign-in are temporarily unavailable.', true);
                     return;
                 }
                 const blockers = [];
@@ -1675,16 +1691,16 @@
                     blockers.push('server authentication is not configured');
                 }
                 if (blockers.length > 0) {
-                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}.`);
+                    setAuthSetupStatus(`Registration and sign-in are unavailable until ${formatBlockerList(blockers)}.`, true);
                     return;
                 }
                 if (typeof data.detail === 'string' && data.detail.trim()) {
-                    setAuthSetupStatus(data.detail.trim());
+                    setAuthSetupStatus(data.detail.trim(), true);
                     return;
                 }
-                setAuthSetupStatus('');
+                setAuthSetupStatus('', false);
             } catch (_error) {
-                setAuthSetupStatus('');
+                setAuthSetupStatus('', false);
             }
         }
 
@@ -1790,7 +1806,7 @@
 
         function onAuthSuccess() {
             document.getElementById('authOverlay').classList.add('hidden');
-            setAuthSetupStatus('');
+            setAuthSetupStatus('', false);
             // Show user info in header
             const name = currentUser.fullName || currentUser.email || 'Player';
             document.getElementById('headerUserName').textContent = name.split(' ')[0];

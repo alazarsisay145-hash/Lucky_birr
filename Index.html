@@ -1652,10 +1652,14 @@
 
         function setAuthSetupStatus(message, disableButtons) {
             const el = document.getElementById('authSetupStatus');
+            el.textContent = '';
             if (message) {
-                el.innerHTML = message + ' <button onclick="loadAuthSetupStatus()" style="margin-left:8px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.5);color:#fde68a;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px;">Retry</button>';
-            } else {
-                el.textContent = '';
+                el.appendChild(document.createTextNode(message));
+                const retryBtn = document.createElement('button');
+                retryBtn.textContent = 'Retry';
+                retryBtn.onclick = loadAuthSetupStatus;
+                retryBtn.setAttribute('style', 'margin-left:8px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.5);color:#fde68a;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px;');
+                el.appendChild(retryBtn);
             }
             el.classList.toggle('show', !!message);
             setAuthButtonsDisabled(!!disableButtons);

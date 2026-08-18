@@ -465,9 +465,27 @@ test('chat allows only two users and supports text/image/voice messages', async 
     const state = await stateResp.json();
     assert.equal(state.participants.length, 2);
     assert.equal(state.messages.length, 3);
+    assert.equal(state.nextCursor, 3);
+    assert.equal(state.hasMore, false);
     assert.equal(state.messages[0].type, 'text');
     assert.equal(state.messages[1].type, 'image');
     assert.equal(state.messages[2].type, 'voice');
+    assert.ok(state.messages[1].media.mediaUrl);
+
+    const mediaResp = await fetch(
+      `http://127.0.0.1:${port}${state.messages[1].media.mediaUrl}?participantId=${encodeURIComponent(firstId)}`
+    );
+    assert.equal(mediaResp.status, 200);
+    const media = await mediaResp.json();
+    assert.equal(media.ok, true);
+    assert.equal(media.media.mimeType, 'image/png');
+    assert.ok(media.media.dataBase64);
+
+    const unauthorizedStateResp = await fetch(`http://127.0.0.1:${port}/api/chat/state`);
+    assert.equal(unauthorizedStateResp.status, 403);
+
+    const unauthorizedMediaResp = await fetch(`http://127.0.0.1:${port}${state.messages[1].media.mediaUrl}`);
+    assert.equal(unauthorizedMediaResp.status, 403);
   } finally {
     await stopServer(server, getStderr);
   }

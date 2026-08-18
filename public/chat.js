@@ -6,6 +6,9 @@ let participant = null;
 let pollingTimer = null;
 let mediaRecorder = null;
 let audioChunks = [];
+let messageCursor = 0;
+let renderedMessageIds = new Set();
+const mediaCache = new Map();
 
 const joinPanel = document.getElementById('joinPanel');
 const chatPanel = document.getElementById('chatPanel');
@@ -38,50 +41,86 @@ function formatTime(iso) {
   }
 }
 
+async function getMediaDataUri(msg) {
+  if (mediaCache.has(msg.id)) return mediaCache.get(msg.id);
+  if (!msg.media?.mediaUrl) throw new Error('Media URL is unavailable');
+
+  const query = new URLSearchParams({ participantId });
+  const response = await fetch(`${msg.media.mediaUrl}?${query.toString()}`, { cache: 'no-store' });
+  const data = await readJson(response);
+  const dataUri = `data:${data.media.mimeType};base64,${data.media.dataBase64}`;
+  mediaCache.set(msg.id, dataUri);
+  return dataUri;
+}
+
 function renderParticipants(participants) {
   participantsInfo.textContent = participants.length
     ? participants.map((item) => `S${item.slot}:${item.displayName}`).join(' | ')
     : 'No operators online';
 }
 
-function renderMessages(messages) {
-  const previousBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+function createMessageElement(msg) {
+  const block = document.createElement('article');
+  block.className = 'msg' + (msg.senderId === participantId ? ' self' : '');
+  block.dataset.messageId = msg.id;
+
+  const head = document.createElement('div');
+  head.className = 'msg-head';
+
+  const who = document.createElement('strong');
+  who.textContent = msg.senderName;
+  head.appendChild(who);
+
+  const when = document.createElement('span');
+  when.textContent = formatTime(msg.createdAt);
+  head.appendChild(when);
+  block.appendChild(head);
+
+  if (msg.type === 'text') {
+    const p = document.createElement('p');
+    p.textContent = msg.text;
+    block.appendChild(p);
+  } else if (msg.type === 'image' && msg.media?.mediaUrl) {
+    const img = document.createElement('img');
+    img.alt = `${msg.senderName} image message`;
+    img.loading = 'lazy';
+    getMediaDataUri(msg)
+      .then((uri) => { img.src = uri; })
+      .catch(() => { img.alt = 'Image failed to load'; });
+    block.appendChild(img);
+  } else if (msg.type === 'voice' && msg.media?.mediaUrl) {
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    getMediaDataUri(msg)
+      .then((uri) => { audio.src = uri; })
+      .catch(() => {
+        const fail = document.createElement('p');
+        fail.textContent = 'Voice message failed to load.';
+        block.appendChild(fail);
+      });
+    block.appendChild(audio);
+  }
+
+  return block;
+}
+
+function resetMessagesView() {
+  messageCursor = 0;
+  renderedMessageIds = new Set();
+  mediaCache.clear();
   messagesEl.innerHTML = '';
+}
+
+function renderMessages(messages, { reset = false } = {}) {
+  const previousBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+  if (reset) {
+    resetMessagesView();
+  }
 
   for (const msg of messages) {
-    const block = document.createElement('article');
-    block.className = 'msg' + (msg.senderId === participantId ? ' self' : '');
-
-    const head = document.createElement('div');
-    head.className = 'msg-head';
-
-    const who = document.createElement('strong');
-    who.textContent = msg.senderName;
-    head.appendChild(who);
-
-    const when = document.createElement('span');
-    when.textContent = formatTime(msg.createdAt);
-    head.appendChild(when);
-
-    block.appendChild(head);
-
-    if (msg.type === 'text') {
-      const p = document.createElement('p');
-      p.textContent = msg.text;
-      block.appendChild(p);
-    } else if (msg.type === 'image' && msg.media?.dataBase64) {
-      const img = document.createElement('img');
-      img.alt = `${msg.senderName} image message`;
-      img.src = `data:${msg.media.mimeType};base64,${msg.media.dataBase64}`;
-      block.appendChild(img);
-    } else if (msg.type === 'voice' && msg.media?.dataBase64) {
-      const audio = document.createElement('audio');
-      audio.controls = true;
-      audio.src = `data:${msg.media.mimeType};base64,${msg.media.dataBase64}`;
-      block.appendChild(audio);
-    }
-
-    messagesEl.appendChild(block);
+    if (renderedMessageIds.has(msg.id)) continue;
+    messagesEl.appendChild(createMessageElement(msg));
+    renderedMessageIds.add(msg.id);
   }
 
   if (previousBottom < 30) {
@@ -105,6 +144,7 @@ async function joinChat() {
   participantId = data.participant.id;
   participant = data.participant;
   localStorage.setItem(STORAGE_KEY, participantId);
+  resetMessagesView();
   renameInput.value = participant.displayName;
   slotInfo.textContent = `Slot ${participant.slot} (${participant.displayName})`;
   renderParticipants(data.participants || []);
@@ -113,20 +153,40 @@ async function joinChat() {
 
 async function refreshState() {
   if (!participantId) return;
-  const response = await fetch(`/api/chat/state?participantId=${encodeURIComponent(participantId)}`, { cache: 'no-store' });
-  const data = await readJson(response);
-  participant = data.participant;
-  if (!participant) {
-    localStorage.removeItem(STORAGE_KEY);
-    participantId = '';
-    setAuthenticatedView(false);
-    setStatus(joinStatus, 'Session expired. Rejoin channel.', true);
-    return;
-  }
+  let hasMore = true;
+  let loopGuard = 0;
 
-  slotInfo.textContent = `Slot ${participant.slot} (${participant.displayName})`;
-  renderParticipants(data.participants || []);
-  renderMessages(data.messages || []);
+  while (hasMore && loopGuard < 10) {
+    loopGuard += 1;
+    const query = new URLSearchParams({
+      participantId,
+      since: String(messageCursor)
+    });
+    const response = await fetch(`/api/chat/state?${query.toString()}`, { cache: 'no-store' });
+    if (response.status === 403) {
+      localStorage.removeItem(STORAGE_KEY);
+      participantId = '';
+      participant = null;
+      resetMessagesView();
+      setAuthenticatedView(false);
+      setStatus(joinStatus, 'Session expired. Rejoin channel.', true);
+      return;
+    }
+
+    const data = await readJson(response);
+    participant = data.participant;
+    slotInfo.textContent = `Slot ${participant.slot} (${participant.displayName})`;
+    renderParticipants(data.participants || []);
+    if (typeof data.nextCursor === 'number' && data.nextCursor < messageCursor) {
+      renderMessages(data.messages || [], { reset: true });
+    } else {
+      renderMessages(data.messages || []);
+    }
+    if (typeof data.nextCursor === 'number') {
+      messageCursor = data.nextCursor;
+    }
+    hasMore = Boolean(data.hasMore);
+  }
 }
 
 async function updateName() {
@@ -205,8 +265,9 @@ async function startRecording() {
   mediaRecorder.onstop = async () => {
     try {
       const type = mediaRecorder.mimeType || 'audio/webm';
+      const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') || type.includes('m4a') ? 'm4a' : 'webm';
       const blob = new Blob(audioChunks, { type });
-      const file = new File([blob], `voice-${Date.now()}.webm`, { type });
+      const file = new File([blob], `voice-${Date.now()}.${extension}`, { type });
       await sendMediaFile(file, 'voice');
       setStatus(chatStatus, 'Voice message sent.');
     } catch (error) {

@@ -148,8 +148,9 @@ const upload = multer({
 });
 
 const CHAT_MAX_USERS = 2;
-const CHAT_MAX_MESSAGES = 200;
+const CHAT_MAX_MESSAGES = 60;
 const CHAT_MAX_TEXT_LENGTH = 2000;
+const CHAT_STATE_BATCH_LIMIT = 25;
 const CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const CHAT_VOICE_TYPES = new Set([
   'audio/webm',
@@ -162,7 +163,9 @@ const CHAT_VOICE_TYPES = new Set([
 const CHAT_ALL_MEDIA_TYPES = new Set([...CHAT_IMAGE_TYPES, ...CHAT_VOICE_TYPES]);
 const chatState = {
   participants: [],
-  messages: []
+  messages: [],
+  messageBaseIndex: 0,
+  mediaByMessageId: new Map()
 };
 
 function sanitizeDisplayName(value) {
@@ -190,7 +193,12 @@ function snapshotParticipants() {
 function appendChatMessage(message) {
   chatState.messages.push(message);
   if (chatState.messages.length > CHAT_MAX_MESSAGES) {
-    chatState.messages.splice(0, chatState.messages.length - CHAT_MAX_MESSAGES);
+    const removedCount = chatState.messages.length - CHAT_MAX_MESSAGES;
+    const removedMessages = chatState.messages.splice(0, removedCount);
+    for (const removedMessage of removedMessages) {
+      chatState.mediaByMessageId.delete(removedMessage.id);
+    }
+    chatState.messageBaseIndex += removedCount;
   }
 }
 
@@ -198,7 +206,7 @@ function requireParticipant(req, res) {
   const participantId = String(req.body?.participantId || req.query?.participantId || '').trim();
   const participant = findParticipantById(participantId);
   if (!participant) {
-    res.status(404).json({ error: 'Participant not found. Join chat first.' });
+    res.status(403).json({ error: 'Participant not recognized for this chat.' });
     return null;
   }
   return participant;
@@ -206,7 +214,7 @@ function requireParticipant(req, res) {
 
 const chatUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 1024 * 1024 },
   fileFilter(_req, file, cb) {
     if (!CHAT_ALL_MEDIA_TYPES.has(file.mimetype)) {
       return cb(new Error('Only image and audio files are allowed'));
@@ -214,6 +222,14 @@ const chatUpload = multer({
     return cb(null, true);
   }
 });
+
+function chatUploadSingle(req, res, next) {
+  chatUpload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    err.statusCode = 400;
+    return next(err);
+  });
+}
 
 app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, uptime: process.uptime() });
@@ -303,13 +319,50 @@ app.put('/api/chat/profile', authRateLimit, (req, res) => {
 });
 
 app.get('/api/chat/state', (req, res) => {
-  const participantId = String(req.query.participantId || '').trim();
-  const participant = participantId ? findParticipantById(participantId) : null;
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const rawSince = String(req.query.since || '0').trim();
+  const since = Number.parseInt(rawSince, 10);
+  const safeSince = Number.isInteger(since) && since >= 0 ? since : 0;
+  const normalizedSince = Math.max(safeSince, chatState.messageBaseIndex);
+  const start = Math.min(normalizedSince - chatState.messageBaseIndex, chatState.messages.length);
+  const messages = chatState.messages.slice(start, start + CHAT_STATE_BATCH_LIMIT);
+  const nextCursor = chatState.messageBaseIndex + start + messages.length;
+  const totalCursor = chatState.messageBaseIndex + chatState.messages.length;
+
   return res.json({
     ok: true,
-    participant: participant || null,
+    participant,
     participants: snapshotParticipants(),
-    messages: chatState.messages
+    messages,
+    nextCursor,
+    hasMore: nextCursor < totalCursor
+  });
+});
+
+app.get('/api/chat/media/:messageId', (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const messageId = String(req.params.messageId || '').trim();
+  const message = chatState.messages.find((item) => item.id === messageId);
+  if (!message || !message.media) {
+    return res.status(404).json({ error: 'Media message not found' });
+  }
+
+  const media = chatState.mediaByMessageId.get(messageId);
+  if (!media) {
+    return res.status(404).json({ error: 'Media data not found' });
+  }
+
+  return res.json({
+    ok: true,
+    media: {
+      mimeType: media.mimeType,
+      fileName: media.fileName,
+      dataBase64: media.dataBase64
+    }
   });
 });
 
@@ -337,7 +390,7 @@ app.post('/api/chat/messages/text', authRateLimit, (req, res) => {
   return res.status(201).json({ ok: true, message });
 });
 
-app.post('/api/chat/messages/media', authRateLimit, chatUpload.single('file'), (req, res) => {
+app.post('/api/chat/messages/media', authRateLimit, chatUploadSingle, (req, res) => {
   const participant = requireParticipant(req, res);
   if (!participant) return;
 
@@ -362,11 +415,17 @@ app.post('/api/chat/messages/media', authRateLimit, chatUpload.single('file'), (
     type: kind,
     media: {
       mimeType: req.file.mimetype,
-      fileName: req.file.originalname || `${kind}.bin`,
-      dataBase64: req.file.buffer.toString('base64')
+      fileName: path.basename(req.file.originalname || `${kind}.bin`).replace(/[^\w.-]/g, '_'),
+      mediaUrl: `/api/chat/media/`
     },
     createdAt: new Date().toISOString()
   };
+  message.media.mediaUrl += message.id;
+  chatState.mediaByMessageId.set(message.id, {
+    mimeType: message.media.mimeType,
+    fileName: message.media.fileName,
+    dataBase64: req.file.buffer.toString('base64')
+  });
   appendChatMessage(message);
   return res.status(201).json({ ok: true, message });
 });

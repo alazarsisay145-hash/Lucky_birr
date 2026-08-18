@@ -2,6 +2,21 @@
 
 Lucky Birr is a browser-based raffle game designed for Telegram Mini App usage, backed by a Node.js/Express API and Supabase persistence.
 
+## Secure Two-User Chat
+
+This repository now also includes a secure hacker-themed chat at:
+
+- `GET /chat`
+
+Chat capabilities:
+- Exactly **2 users total** can join the chat at once
+- Text messages
+- Photo/image messages
+- Voice messages (upload or browser recording)
+- Editable display name per user
+
+No extra setup is required beyond running the app locally (`npm ci && npm start`).
+
 ## Quick Start (local)
 
 ```bash
@@ -101,4 +116,3 @@ Deploy to **Render** using the included `render.yaml` Blueprint:
 6. Verify: `GET https://your-service.onrender.com/healthz` → `{"ok":true}` and `/readyz` → `{"ok":true}`.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full step-by-step instructions including Supabase setup.
-

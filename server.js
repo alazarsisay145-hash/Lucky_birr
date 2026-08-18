@@ -147,6 +147,74 @@ const upload = multer({
   }
 });
 
+const CHAT_MAX_USERS = 2;
+const CHAT_MAX_MESSAGES = 200;
+const CHAT_MAX_TEXT_LENGTH = 2000;
+const CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
+const CHAT_VOICE_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4',
+  'audio/x-m4a'
+]);
+const CHAT_ALL_MEDIA_TYPES = new Set([...CHAT_IMAGE_TYPES, ...CHAT_VOICE_TYPES]);
+const chatState = {
+  participants: [],
+  messages: []
+};
+
+function sanitizeDisplayName(value) {
+  const input = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!input) return null;
+  return input.slice(0, 32);
+}
+
+function getSlotName(slot) {
+  return slot === 1 ? 'Operator-1' : 'Operator-2';
+}
+
+function findParticipantById(participantId) {
+  return chatState.participants.find((item) => item.id === participantId) || null;
+}
+
+function snapshotParticipants() {
+  return chatState.participants.map((item) => ({
+    id: item.id,
+    displayName: item.displayName,
+    slot: item.slot
+  }));
+}
+
+function appendChatMessage(message) {
+  chatState.messages.push(message);
+  if (chatState.messages.length > CHAT_MAX_MESSAGES) {
+    chatState.messages.splice(0, chatState.messages.length - CHAT_MAX_MESSAGES);
+  }
+}
+
+function requireParticipant(req, res) {
+  const participantId = String(req.body?.participantId || req.query?.participantId || '').trim();
+  const participant = findParticipantById(participantId);
+  if (!participant) {
+    res.status(404).json({ error: 'Participant not found. Join chat first.' });
+    return null;
+  }
+  return participant;
+}
+
+const chatUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (!CHAT_ALL_MEDIA_TYPES.has(file.mimetype)) {
+      return cb(new Error('Only image and audio files are allowed'));
+    }
+    return cb(null, true);
+  }
+});
+
 app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, uptime: process.uptime() });
 });
@@ -180,6 +248,127 @@ app.get('/readyz', async (_req, res) => {
 
   body.ok = checks.database && checks.jwt;
   res.status(body.ok ? 200 : 503).json(body);
+});
+
+app.get('/chat', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'chat.html')));
+
+app.post('/api/chat/join', authRateLimit, (req, res) => {
+  const requestedId = String(req.body?.participantId || '').trim();
+  const requestedName = sanitizeDisplayName(req.body?.displayName);
+
+  if (requestedId) {
+    const existingParticipant = findParticipantById(requestedId);
+    if (existingParticipant) {
+      if (requestedName) {
+        existingParticipant.displayName = requestedName;
+      }
+      return res.json({
+        ok: true,
+        participant: existingParticipant,
+        participants: snapshotParticipants()
+      });
+    }
+  }
+
+  if (chatState.participants.length >= CHAT_MAX_USERS) {
+    return res.status(403).json({ error: 'Chat is full. Only two users are allowed.' });
+  }
+
+  const slot = chatState.participants.length + 1;
+  const participant = {
+    id: randomUUID(),
+    slot,
+    displayName: requestedName || getSlotName(slot),
+    joinedAt: new Date().toISOString()
+  };
+  chatState.participants.push(participant);
+  return res.status(201).json({
+    ok: true,
+    participant,
+    participants: snapshotParticipants()
+  });
+});
+
+app.put('/api/chat/profile', authRateLimit, (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const displayName = sanitizeDisplayName(req.body?.displayName);
+  if (!displayName) {
+    return res.status(400).json({ error: 'displayName is required' });
+  }
+
+  participant.displayName = displayName;
+  return res.json({ ok: true, participant, participants: snapshotParticipants() });
+});
+
+app.get('/api/chat/state', (req, res) => {
+  const participantId = String(req.query.participantId || '').trim();
+  const participant = participantId ? findParticipantById(participantId) : null;
+  return res.json({
+    ok: true,
+    participant: participant || null,
+    participants: snapshotParticipants(),
+    messages: chatState.messages
+  });
+});
+
+app.post('/api/chat/messages/text', authRateLimit, (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const text = String(req.body?.text || '').trim();
+  if (!text) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+  if (text.length > CHAT_MAX_TEXT_LENGTH) {
+    return res.status(400).json({ error: `text must be ${CHAT_MAX_TEXT_LENGTH} characters or less` });
+  }
+
+  const message = {
+    id: randomUUID(),
+    senderId: participant.id,
+    senderName: participant.displayName,
+    type: 'text',
+    text,
+    createdAt: new Date().toISOString()
+  };
+  appendChatMessage(message);
+  return res.status(201).json({ ok: true, message });
+});
+
+app.post('/api/chat/messages/media', authRateLimit, chatUpload.single('file'), (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const kind = String(req.body?.kind || '').trim();
+  if (!['image', 'voice'].includes(kind)) {
+    return res.status(400).json({ error: "kind must be either 'image' or 'voice'" });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'file is required' });
+  }
+  if (kind === 'image' && !CHAT_IMAGE_TYPES.has(req.file.mimetype)) {
+    return res.status(400).json({ error: 'file must be an image for kind=image' });
+  }
+  if (kind === 'voice' && !CHAT_VOICE_TYPES.has(req.file.mimetype)) {
+    return res.status(400).json({ error: 'file must be an audio file for kind=voice' });
+  }
+
+  const message = {
+    id: randomUUID(),
+    senderId: participant.id,
+    senderName: participant.displayName,
+    type: kind,
+    media: {
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname || `${kind}.bin`,
+      dataBase64: req.file.buffer.toString('base64')
+    },
+    createdAt: new Date().toISOString()
+  };
+  appendChatMessage(message);
+  return res.status(201).json({ ok: true, message });
 });
 
 app.post('/webhook/:secret', async (req, res) => {

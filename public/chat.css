@@ -1,0 +1,175 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  background: radial-gradient(circle at top, #071f12 0%, #020505 45%, #000 100%);
+  color: #88ffb5;
+}
+
+.scanline {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 50%, transparent 50%);
+  background-size: 100% 4px;
+  opacity: 0.12;
+}
+
+.terminal {
+  width: min(980px, 95vw);
+  margin: 2rem auto;
+  border: 1px solid #0c6b3a;
+  background: rgba(3, 15, 10, 0.93);
+  box-shadow: 0 0 30px rgba(7, 145, 76, 0.35), inset 0 0 30px rgba(7, 145, 76, 0.15);
+  position: relative;
+  z-index: 1;
+}
+
+.topbar {
+  border-bottom: 1px solid #0c6b3a;
+  padding: 1rem 1.2rem;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #a4ffca;
+}
+
+.topbar p {
+  margin: 0.4rem 0 0;
+  color: #66cd95;
+}
+
+.panel {
+  padding: 1rem 1.2rem 1.2rem;
+}
+
+.hidden {
+  display: none;
+}
+
+.row {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+input,
+textarea,
+button,
+.file-label {
+  font: inherit;
+  border: 1px solid #1e8f56;
+  background: #010a05;
+  color: #9bffc2;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.55rem;
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+button,
+.file-label {
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover,
+.file-label:hover {
+  background: #0b2418;
+}
+
+.file-label {
+  display: inline-flex;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.meta-row {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.messages {
+  border: 1px solid #145636;
+  background: #000;
+  padding: 0.8rem;
+  min-height: 290px;
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0.8rem 0;
+}
+
+.msg {
+  border: 1px solid #0d3f28;
+  background: rgba(6, 35, 22, 0.8);
+  margin-bottom: 0.65rem;
+  padding: 0.55rem;
+}
+
+.msg.self {
+  border-color: #20a062;
+  background: rgba(13, 54, 35, 0.85);
+}
+
+.msg-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: #65cd94;
+  margin-bottom: 0.4rem;
+}
+
+.msg img,
+.msg audio {
+  width: min(100%, 360px);
+  display: block;
+}
+
+.status {
+  min-height: 1.2em;
+  margin: 0.7rem 0 0;
+  color: #66cd95;
+}
+
+.status.error {
+  color: #ff7a7a;
+}
+
+@media (max-width: 700px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  button,
+  .file-label {
+    width: 100%;
+    justify-content: center;
+  }
+}

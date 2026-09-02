@@ -411,6 +411,110 @@ test('static assets are served from /public directory', async () => {
   }
 });
 
+test('GET /chat serves the secure two-user chat shell', async () => {
+  const port = 3125;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/chat`);
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /SECURE_DUO_CHAT/i);
+    assert.match(body, /JOIN CHANNEL/i);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
+test('chat allows only two users and supports text/image/voice messages', async () => {
+  const port = 3126;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+
+    const joinOneResp = await fetch(`http://127.0.0.1:${port}/api/chat/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Neo' })
+    });
+    assert.equal(joinOneResp.status, 201);
+    const joinOne = await joinOneResp.json();
+    const firstId = joinOne.participant.id;
+
+    const joinTwoResp = await fetch(`http://127.0.0.1:${port}/api/chat/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Trinity' })
+    });
+    assert.equal(joinTwoResp.status, 201);
+    const joinTwo = await joinTwoResp.json();
+    const secondId = joinTwo.participant.id;
+
+    const joinThreeResp = await fetch(`http://127.0.0.1:${port}/api/chat/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Morpheus' })
+    });
+    assert.equal(joinThreeResp.status, 403);
+
+    const textResp = await fetch(`http://127.0.0.1:${port}/api/chat/messages/text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantId: firstId, text: 'Encrypted hello' })
+    });
+    assert.equal(textResp.status, 201);
+
+    const imageData = new FormData();
+    imageData.append('participantId', secondId);
+    imageData.append('kind', 'image');
+    imageData.append('file', new File([Uint8Array.from([137, 80, 78, 71])], 'proof.png', { type: 'image/png' }));
+    const imageResp = await fetch(`http://127.0.0.1:${port}/api/chat/messages/media`, {
+      method: 'POST',
+      body: imageData
+    });
+    assert.equal(imageResp.status, 201);
+
+    const voiceData = new FormData();
+    voiceData.append('participantId', firstId);
+    voiceData.append('kind', 'voice');
+    voiceData.append('file', new File([Uint8Array.from([82, 73, 70, 70, 0, 0, 0, 0])], 'voice.webm', { type: 'audio/webm' }));
+    const voiceResp = await fetch(`http://127.0.0.1:${port}/api/chat/messages/media`, {
+      method: 'POST',
+      body: voiceData
+    });
+    assert.equal(voiceResp.status, 201);
+
+    const stateResp = await fetch(`http://127.0.0.1:${port}/api/chat/state?participantId=${encodeURIComponent(firstId)}`);
+    assert.equal(stateResp.status, 200);
+    const state = await stateResp.json();
+    assert.equal(state.participants.length, 2);
+    assert.equal(state.messages.length, 3);
+    assert.equal(state.nextCursor, 3);
+    assert.equal(state.hasMore, false);
+    assert.equal(state.messages[0].type, 'text');
+    assert.equal(state.messages[1].type, 'image');
+    assert.equal(state.messages[2].type, 'voice');
+    assert.ok(state.messages[1].media.mediaUrl);
+
+    const mediaResp = await fetch(
+      `http://127.0.0.1:${port}${state.messages[1].media.mediaUrl}?participantId=${encodeURIComponent(firstId)}`
+    );
+    assert.equal(mediaResp.status, 200);
+    const media = await mediaResp.json();
+    assert.equal(media.ok, true);
+    assert.equal(media.media.mimeType, 'image/png');
+    assert.ok(media.media.dataBase64);
+
+    const unauthorizedStateResp = await fetch(`http://127.0.0.1:${port}/api/chat/state`);
+    assert.equal(unauthorizedStateResp.status, 403);
+
+    const unauthorizedMediaResp = await fetch(`http://127.0.0.1:${port}${state.messages[1].media.mediaUrl}`);
+    assert.equal(unauthorizedMediaResp.status, 403);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
 test('unknown routes serve the game shell (SPA fallback)', async () => {
   const port = 3120;
   const { server, getStderr } = spawnServer(port);

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lucky Birr :: Secure Duo Chat</title>
+  <link rel="stylesheet" href="/chat.css" />
+</head>
+<body>
+  <div class="scanline"></div>
+  <main class="terminal">
+    <header class="topbar">
+      <h1>SECURE_DUO_CHAT</h1>
+      <p>Encrypted relay • two operators only</p>
+    </header>
+
+    <section id="joinPanel" class="panel">
+      <label for="displayNameInput">DISPLAY NAME</label>
+      <div class="row">
+        <input id="displayNameInput" maxlength="32" placeholder="Operator alias" />
+        <button id="joinBtn" type="button">JOIN CHANNEL</button>
+      </div>
+      <p id="joinStatus" class="status"></p>
+    </section>
+
+    <section id="chatPanel" class="panel hidden">
+      <div class="meta-row">
+        <div>
+          <strong>ACTIVE SLOT:</strong>
+          <span id="slotInfo">-</span>
+        </div>
+        <div>
+          <strong>PARTICIPANTS:</strong>
+          <span id="participantsInfo">-</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <input id="renameInput" maxlength="32" placeholder="Edit your display name" />
+        <button id="renameBtn" type="button">UPDATE NAME</button>
+      </div>
+
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <div class="composer">
+        <textarea id="textInput" maxlength="2000" placeholder="Type secure message..."></textarea>
+        <div class="row wrap">
+          <button id="sendTextBtn" type="button">SEND TEXT</button>
+          <label class="file-label" for="imageInput">SEND IMAGE</label>
+          <input id="imageInput" type="file" accept="image/*" />
+          <label class="file-label" for="voiceInput">SEND VOICE FILE</label>
+          <input id="voiceInput" type="file" accept="audio/*" />
+          <button id="recordBtn" type="button">RECORD VOICE</button>
+          <button id="stopRecordBtn" type="button" disabled>STOP + SEND</button>
+        </div>
+      </div>
+      <p id="chatStatus" class="status"></p>
+    </section>
+  </main>
+
+  <script src="/chat.js"></script>
+</body>
+</html>

@@ -155,6 +155,90 @@ const upload = multer({
   }
 });
 
+const CHAT_MAX_USERS = 2;
+const CHAT_MAX_MESSAGES = 60;
+const CHAT_MAX_TEXT_LENGTH = 2000;
+const CHAT_STATE_BATCH_LIMIT = 25;
+const CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
+const CHAT_VOICE_TYPES = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4',
+  'audio/x-m4a'
+]);
+const CHAT_ALL_MEDIA_TYPES = new Set([...CHAT_IMAGE_TYPES, ...CHAT_VOICE_TYPES]);
+const chatState = {
+  participants: [],
+  messages: [],
+  messageBaseIndex: 0,
+  mediaByMessageId: new Map()
+};
+
+function sanitizeDisplayName(value) {
+  const input = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!input) return null;
+  return input.slice(0, 32);
+}
+
+function getSlotName(slot) {
+  return slot === 1 ? 'Operator-1' : 'Operator-2';
+}
+
+function findParticipantById(participantId) {
+  return chatState.participants.find((item) => item.id === participantId) || null;
+}
+
+function snapshotParticipants() {
+  return chatState.participants.map((item) => ({
+    id: item.id,
+    displayName: item.displayName,
+    slot: item.slot
+  }));
+}
+
+function appendChatMessage(message) {
+  chatState.messages.push(message);
+  if (chatState.messages.length > CHAT_MAX_MESSAGES) {
+    const removedCount = chatState.messages.length - CHAT_MAX_MESSAGES;
+    const removedMessages = chatState.messages.splice(0, removedCount);
+    for (const removedMessage of removedMessages) {
+      chatState.mediaByMessageId.delete(removedMessage.id);
+    }
+    chatState.messageBaseIndex += removedCount;
+  }
+}
+
+function requireParticipant(req, res) {
+  const participantId = String(req.body?.participantId || req.query?.participantId || '').trim();
+  const participant = findParticipantById(participantId);
+  if (!participant) {
+    res.status(403).json({ error: 'Participant not recognized for this chat.' });
+    return null;
+  }
+  return participant;
+}
+
+const chatUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (!CHAT_ALL_MEDIA_TYPES.has(file.mimetype)) {
+      return cb(new Error('Only image and audio files are allowed'));
+    }
+    return cb(null, true);
+  }
+});
+
+function chatUploadSingle(req, res, next) {
+  chatUpload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    err.statusCode = 400;
+    return next(err);
+  });
+}
+
 app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, uptime: process.uptime() });
 });
@@ -188,6 +272,170 @@ app.get('/readyz', async (_req, res) => {
 
   body.ok = checks.database && checks.jwt;
   res.status(body.ok ? 200 : 503).json(body);
+});
+
+app.get('/chat', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'chat.html')));
+
+app.post('/api/chat/join', authRateLimit, (req, res) => {
+  const requestedId = String(req.body?.participantId || '').trim();
+  const requestedName = sanitizeDisplayName(req.body?.displayName);
+
+  if (requestedId) {
+    const existingParticipant = findParticipantById(requestedId);
+    if (existingParticipant) {
+      if (requestedName) {
+        existingParticipant.displayName = requestedName;
+      }
+      return res.json({
+        ok: true,
+        participant: existingParticipant,
+        participants: snapshotParticipants()
+      });
+    }
+  }
+
+  if (chatState.participants.length >= CHAT_MAX_USERS) {
+    return res.status(403).json({ error: 'Chat is full. Only two users are allowed.' });
+  }
+
+  const slot = chatState.participants.length + 1;
+  const participant = {
+    id: randomUUID(),
+    slot,
+    displayName: requestedName || getSlotName(slot),
+    joinedAt: new Date().toISOString()
+  };
+  chatState.participants.push(participant);
+  return res.status(201).json({
+    ok: true,
+    participant,
+    participants: snapshotParticipants()
+  });
+});
+
+app.put('/api/chat/profile', authRateLimit, (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const displayName = sanitizeDisplayName(req.body?.displayName);
+  if (!displayName) {
+    return res.status(400).json({ error: 'displayName is required' });
+  }
+
+  participant.displayName = displayName;
+  return res.json({ ok: true, participant, participants: snapshotParticipants() });
+});
+
+app.get('/api/chat/state', (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const rawSince = String(req.query.since || '0').trim();
+  const since = Number.parseInt(rawSince, 10);
+  const safeSince = Number.isInteger(since) && since >= 0 ? since : 0;
+  const normalizedSince = Math.max(safeSince, chatState.messageBaseIndex);
+  const start = Math.min(normalizedSince - chatState.messageBaseIndex, chatState.messages.length);
+  const messages = chatState.messages.slice(start, start + CHAT_STATE_BATCH_LIMIT);
+  const nextCursor = chatState.messageBaseIndex + start + messages.length;
+  const totalCursor = chatState.messageBaseIndex + chatState.messages.length;
+
+  return res.json({
+    ok: true,
+    participant,
+    participants: snapshotParticipants(),
+    messages,
+    nextCursor,
+    hasMore: nextCursor < totalCursor
+  });
+});
+
+app.get('/api/chat/media/:messageId', (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const messageId = String(req.params.messageId || '').trim();
+  const message = chatState.messages.find((item) => item.id === messageId);
+  if (!message || !message.media) {
+    return res.status(404).json({ error: 'Media message not found' });
+  }
+
+  const media = chatState.mediaByMessageId.get(messageId);
+  if (!media) {
+    return res.status(404).json({ error: 'Media data not found' });
+  }
+
+  return res.json({
+    ok: true,
+    media: {
+      mimeType: media.mimeType,
+      fileName: media.fileName,
+      dataBase64: media.dataBase64
+    }
+  });
+});
+
+app.post('/api/chat/messages/text', authRateLimit, (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const text = String(req.body?.text || '').trim();
+  if (!text) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+  if (text.length > CHAT_MAX_TEXT_LENGTH) {
+    return res.status(400).json({ error: `text must be ${CHAT_MAX_TEXT_LENGTH} characters or less` });
+  }
+
+  const message = {
+    id: randomUUID(),
+    senderId: participant.id,
+    senderName: participant.displayName,
+    type: 'text',
+    text,
+    createdAt: new Date().toISOString()
+  };
+  appendChatMessage(message);
+  return res.status(201).json({ ok: true, message });
+});
+
+app.post('/api/chat/messages/media', authRateLimit, chatUploadSingle, (req, res) => {
+  const participant = requireParticipant(req, res);
+  if (!participant) return;
+
+  const kind = String(req.body?.kind || '').trim();
+  if (!['image', 'voice'].includes(kind)) {
+    return res.status(400).json({ error: "kind must be either 'image' or 'voice'" });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'file is required' });
+  }
+  if (kind === 'image' && !CHAT_IMAGE_TYPES.has(req.file.mimetype)) {
+    return res.status(400).json({ error: 'file must be an image for kind=image' });
+  }
+  if (kind === 'voice' && !CHAT_VOICE_TYPES.has(req.file.mimetype)) {
+    return res.status(400).json({ error: 'file must be an audio file for kind=voice' });
+  }
+
+  const message = {
+    id: randomUUID(),
+    senderId: participant.id,
+    senderName: participant.displayName,
+    type: kind,
+    media: {
+      mimeType: req.file.mimetype,
+      fileName: path.basename(req.file.originalname || `${kind}.bin`).replace(/[^\w.-]/g, '_'),
+      mediaUrl: `/api/chat/media/`
+    },
+    createdAt: new Date().toISOString()
+  };
+  message.media.mediaUrl += message.id;
+  chatState.mediaByMessageId.set(message.id, {
+    mimeType: message.media.mimeType,
+    fileName: message.media.fileName,
+    dataBase64: req.file.buffer.toString('base64')
+  });
+  appendChatMessage(message);
+  return res.status(201).json({ ok: true, message });
 });
 
 app.post('/webhook/:secret', async (req, res) => {

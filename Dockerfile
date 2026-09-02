@@ -10,6 +10,7 @@ RUN npm ci --omit=dev
 COPY server.js ./
 COPY Index.html ./
 COPY bot.js ./
+COPY lib/ ./lib/
 COPY public/ ./public/
 
 # Run as non-root user

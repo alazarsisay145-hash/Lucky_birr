@@ -1054,20 +1054,12 @@
 
                 <div class="payment-section">
                     <div class="section-title"><div class="dot"></div> Payment</div>
-                    <div class="pay-card">
-                        <div class="icon">📱</div>
-                        <div class="info"><div class="name">Telebirr</div><div class="detail">0936 719 379</div></div>
-                        <button class="copy" onclick="copyText('0936719379', this)">Copy</button>
-                    </div>
-                    <div class="pay-card">
-                        <div class="icon">🏦</div>
-                        <div class="info"><div class="name">Dashen Bank</div><div class="detail">5236 2713 5901 1</div></div>
-                        <button class="copy" onclick="copyText('5236271359011', this)">Copy</button>
-                    </div>
-                    <div class="pay-card">
-                        <div class="icon">👤</div>
-                        <div class="info"><div class="name">Name</div><div class="detail">Alazar Sisay</div></div>
-                        <button class="copy" onclick="copyText('Alazar Sisay', this)">Copy</button>
+                    <!-- Populated from the server-side payment destination configuration. -->
+                    <div id="rafflePaymentCards">
+                        <div class="pay-card">
+                            <div class="icon">💳</div>
+                            <div class="info"><div class="name">Loading payment accounts…</div><div class="detail">Please wait</div></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1529,6 +1521,16 @@
                 </div>
 
                 <div class="tx-section">
+                    <div class="tx-section-title">Deposit &amp; Withdrawal Requests</div>
+                    <div class="bet-quick-row" id="reqFilters" role="group" aria-label="Filter requests">
+                        <button class="bet-quick active" data-req-filter="deposits" onclick="setRequestFilter('deposits')">Deposits</button>
+                        <button class="bet-quick" data-req-filter="withdrawals" onclick="setRequestFilter('withdrawals')">Withdrawals</button>
+                    </div>
+                    <div id="requestList"><div class="tx-empty">Loading...</div></div>
+                    <button class="dep-cancel-btn" id="reqMoreBtn" style="display:none;" onclick="loadRequests(requestPage + 1)">Load more</button>
+                </div>
+
+                <div class="tx-section">
                     <div class="tx-section-title">Transaction History</div>
                     <div class="bet-quick-row" id="txFilters" role="group" aria-label="Filter transactions">
                         <button class="bet-quick active" data-filter="all" onclick="setTxFilter('all')">All</button>
@@ -1564,46 +1566,45 @@
 
                 <!-- Manual tab -->
                 <div id="depFormManual" class="dep-form" style="display:none;">
-                    <div class="section-title" style="margin:0 0 6px;"><div class="dot"></div> Send to any of these accounts:</div>
-                    <div class="manual-info-card">
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">📱 Telebirr</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="telebirrNum">0936719379</div></div>
-                            <button class="mir-copy" onclick="copyManual('0936719379', this)">Copy</button>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">🏦 Dashen Bank</div><div style="font-size:12px;font-weight:700;font-family:monospace;">5236271359011</div></div>
-                            <button class="mir-copy" onclick="copyManual('5236271359011', this)">Copy</button>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">🏦 CBE</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="cbeNum">Not available</div></div>
-                            <span style="font-size:10px;color:var(--text2);">—</span>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">👤 Name</div><div style="font-size:12px;font-weight:700;">Alazar Sisay</div></div>
-                            <button class="mir-copy" onclick="copyManual('Alazar Sisay', this)">Copy</button>
-                        </div>
+                    <div class="section-title" style="margin:0 0 6px;"><div class="dot"></div> Send the money to one of these accounts:</div>
+                    <div class="manual-info-card" id="manualDestinations">
+                        <div class="manual-info-row"><div class="mir-label">Loading payment accounts…</div></div>
+                    </div>
+                    <div id="manualDepositNotice" style="font-size:11px;color:var(--text2);line-height:1.5;">
+                        Transfer the money yourself, then submit your receipt here. Proof is checked manually by an
+                        operator — submitting it does not credit your wallet and does not guarantee approval.
                     </div>
                     <div>
-                        <label class="dep-label">Amount Sent (ETB)</label>
-                        <input type="number" class="dep-input" id="manualAmountInput" min="10" placeholder="e.g. 100">
+                        <label class="dep-label" for="manualAmountInput">Amount Sent (ETB)</label>
+                        <input type="number" class="dep-input" id="manualAmountInput" min="10" step="0.01" placeholder="e.g. 100">
                     </div>
                     <div>
-                        <label class="dep-label">Payment Method</label>
-                        <div class="dep-method-grid">
-                            <button class="dep-method-btn active" id="manMethTelebirr" onclick="selectManualMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
-                            <button class="dep-method-btn" id="manMethDashen" onclick="selectManualMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
-                            <button class="dep-method-btn" id="manMethCBE" onclick="selectManualMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
-                        </div>
+                        <label class="dep-label" for="manualDestinationSelect">Where did you send it?</label>
+                        <select class="dep-input" id="manualDestinationSelect"></select>
                     </div>
                     <div>
-                        <label class="dep-label">Upload Payment Receipt</label>
+                        <label class="dep-label" for="manualSenderRef">Your phone / account used to send</label>
+                        <input type="text" class="dep-input" id="manualSenderRef" inputmode="tel" placeholder="e.g. 0912345678">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="manualExternalRef">Transaction / reference ID (optional)</label>
+                        <input type="text" class="dep-input" id="manualExternalRef" placeholder="e.g. CH1234ABCD">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="manualNote">Note (optional)</label>
+                        <input type="text" class="dep-input" id="manualNote" maxlength="300" placeholder="Anything the reviewer should know">
+                    </div>
+                    <div>
+                        <label class="dep-label">Upload Payment Receipt (JPG, PNG or WebP · max 6 MB)</label>
                         <div class="screenshot-zone" id="depScreenshotZone" onclick="document.getElementById('depFileInput').click()">
                             <div class="sz-icon" id="depZoneIcon">📤</div>
                             <div class="sz-text" id="depZoneText">Tap to upload screenshot</div>
                         </div>
-                        <input type="file" id="depFileInput" accept="image/*" style="display:none;" onchange="handleDepFile(event)">
+                        <img id="depProofPreview" alt="Selected receipt preview" style="display:none;width:100%;max-height:180px;object-fit:contain;border-radius:10px;margin-top:8px;">
+                        <input type="file" id="depFileInput" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="handleDepFile(event)">
                     </div>
-                    <button class="dep-submit-btn" id="manualDepBtn" onclick="submitManualDeposit()">📨 Submit for Review</button>
+                    <div id="manualDepStatus" style="display:none;font-size:12px;color:var(--text2);text-align:center;"></div>
+                    <button class="dep-submit-btn" id="manualDepBtn" onclick="submitManualDeposit()">📨 Submit Proof for Review</button>
                     <button class="dep-cancel-btn" onclick="closeDepositModal()">Cancel</button>
                 </div>
             </div>
@@ -1614,29 +1615,37 @@
             <div class="wd-modal">
                 <h3>💸 Withdraw Funds</h3>
                 <div class="dep-form" id="wdForm">
-                    <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px;font-size:12px;color:var(--accent);">
-                        Minimum withdrawal: 50 ETB • Processed within 24 hours
+                    <div id="wdLimitsNote" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px;font-size:12px;color:var(--accent);">
+                        Minimum withdrawal: 50 ETB • Paid out manually after review
                     </div>
                     <div>
-                        <label class="dep-label">Amount (ETB)</label>
-                        <input type="number" class="dep-input" id="wdAmountInput" min="50" placeholder="e.g. 100">
+                        <label class="dep-label" for="wdAmountInput">Amount (ETB)</label>
+                        <input type="number" class="dep-input" id="wdAmountInput" min="50" step="0.01" placeholder="e.g. 100">
                     </div>
                     <div>
-                        <label class="dep-label">Payment Method</label>
+                        <label class="dep-label">Send my payout to</label>
                         <div class="dep-method-grid">
                             <button class="dep-method-btn active" id="wdMethTelebirr" onclick="selectWdMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
-                            <button class="dep-method-btn" id="wdMethDashen" onclick="selectWdMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
-                            <button class="dep-method-btn" id="wdMethCBE" onclick="selectWdMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
+                            <button class="dep-method-btn" id="wdMethBank" onclick="selectWdMethod('bank')"><span class="dm-icon">🏦</span>Bank</button>
                         </div>
                     </div>
-                    <div>
-                        <label class="dep-label">Your Account Number</label>
-                        <input type="text" class="dep-input" id="wdAccountNum" placeholder="e.g. 0911234567">
+                    <div id="wdBankRow" style="display:none;">
+                        <label class="dep-label" for="wdBankName">Bank</label>
+                        <input type="text" class="dep-input" id="wdBankName" maxlength="60" placeholder="e.g. Commercial Bank of Ethiopia">
                     </div>
                     <div>
-                        <label class="dep-label">Account Holder Name</label>
-                        <input type="text" class="dep-input" id="wdAccountName" placeholder="e.g. Abebe Kebede">
+                        <label class="dep-label" for="wdAccountNum">Your <span id="wdAccountLabel">Telebirr number</span></label>
+                        <input type="text" class="dep-input" id="wdAccountNum" inputmode="tel" placeholder="e.g. 0912345678">
                     </div>
+                    <div>
+                        <label class="dep-label" for="wdAccountName">Account Holder Name</label>
+                        <input type="text" class="dep-input" id="wdAccountName" maxlength="80" placeholder="e.g. Abebe Kebede">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="wdNote">Note (optional)</label>
+                        <input type="text" class="dep-input" id="wdNote" maxlength="300" placeholder="Anything the operator should know">
+                    </div>
+                    <div id="wdStatus" style="display:none;font-size:12px;color:var(--text2);text-align:center;"></div>
                     <button class="dep-submit-btn" id="wdSubmitBtn" onclick="submitWithdrawal()">💸 Request Withdrawal</button>
                     <button class="dep-cancel-btn" onclick="closeWithdrawModal()">Cancel</button>
                 </div>
@@ -1873,11 +1882,15 @@
             currentUser = user;
             localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
             localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            // Payment destinations are server configuration, so they are fetched
+            // once a session exists rather than being baked into the page.
+            if (typeof loadPaymentConfig === 'function') loadPaymentConfig(true);
         }
 
         function clearAuthSession() {
             AUTH_TOKEN = null;
             currentUser = null;
+            walletConfigLoaded = false;
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
             localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
         }
@@ -2477,7 +2490,11 @@
         }
 
         function showPaymentInfo() {
-            showToast('📱 Telebirr: 0936719379 | 🏦 Dashen: 5236271359011');
+            const dests = (typeof walletConfig !== 'undefined' && walletConfig.destinations) ? walletConfig.destinations : [];
+            const summary = dests.length
+                ? dests.map(d => (d.type === 'telebirr' ? '📱 ' : '🏦 ') + d.bank_name + ': ' + d.account_number).join(' | ')
+                : 'Payment accounts are loading. Please open the wallet and try again.';
+            showToast(summary);
             closeModal();
         }
 
@@ -3682,7 +3699,9 @@
         const TX_PAGE_SIZE = 20;
 
         async function loadWallet() {
+            await loadPaymentConfig();
             await loadWalletSummary();
+            await loadRequests(1);
             await loadTransactions(1);
         }
 
@@ -3804,60 +3823,244 @@
             showTab('wallet');
         }
 
+        // ===== MANUAL PAYMENT CONFIGURATION (server-provided) =====
+        // The destination list, limits and the Chapa switch all come from the
+        // backend; nothing about where money goes is hard-coded in the client.
+        let walletConfig = { destinations: [], limits: null, chapa_enabled: false, notice: '' };
+        let walletConfigLoaded = false;
+
+        async function loadPaymentConfig(force) {
+            if (!AUTH_TOKEN) return walletConfig;
+            if (walletConfigLoaded && !force) return walletConfig;
+            try {
+                const resp = await fetch('/api/payment/destinations', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Payment destinations');
+                if (resp.ok && data && data.ok) {
+                    walletConfig = {
+                        destinations: data.destinations || [],
+                        limits: data.limits || null,
+                        chapa_enabled: Boolean(data.chapa_enabled),
+                        notice: data.notice || ''
+                    };
+                    walletConfigLoaded = true;
+                    renderPaymentConfig();
+                }
+            } catch (_e) { /* the modal keeps its placeholder copy */ }
+            return walletConfig;
+        }
+
+        function renderDestinationRow(dest) {
+            const row = document.createElement('div');
+            row.className = 'manual-info-row';
+            const left = document.createElement('div');
+            const label = document.createElement('div');
+            label.className = 'mir-label';
+            label.textContent = (dest.type === 'telebirr' ? '📱 ' : '🏦 ') + dest.bank_name;
+            const number = document.createElement('div');
+            number.style.cssText = 'font-size:12px;font-weight:700;font-family:monospace;';
+            number.textContent = dest.account_number;
+            const holder = document.createElement('div');
+            holder.style.cssText = 'font-size:11px;color:var(--text2);';
+            holder.textContent = dest.account_holder;
+            left.appendChild(label);
+            left.appendChild(number);
+            left.appendChild(holder);
+            const copy = document.createElement('button');
+            copy.className = 'mir-copy';
+            copy.type = 'button';
+            copy.textContent = 'Copy';
+            copy.addEventListener('click', function () { copyManual(dest.account_number, copy); });
+            row.appendChild(left);
+            row.appendChild(copy);
+            return row;
+        }
+
+        function renderPaymentConfig() {
+            const raffleCards = document.getElementById('rafflePaymentCards');
+            if (raffleCards) {
+                raffleCards.innerHTML = '';
+                walletConfig.destinations.forEach(dest => {
+                    const card = document.createElement('div');
+                    card.className = 'pay-card';
+                    const icon = document.createElement('div');
+                    icon.className = 'icon';
+                    icon.textContent = dest.type === 'telebirr' ? '📱' : '🏦';
+                    const info = document.createElement('div');
+                    info.className = 'info';
+                    const name = document.createElement('div');
+                    name.className = 'name';
+                    name.textContent = dest.bank_name;
+                    const detail = document.createElement('div');
+                    detail.className = 'detail';
+                    detail.textContent = dest.account_number + ' · ' + dest.account_holder;
+                    info.appendChild(name);
+                    info.appendChild(detail);
+                    const copy = document.createElement('button');
+                    copy.className = 'copy';
+                    copy.type = 'button';
+                    copy.textContent = 'Copy';
+                    copy.addEventListener('click', function () { copyText(dest.account_number, copy); });
+                    card.appendChild(icon);
+                    card.appendChild(info);
+                    card.appendChild(copy);
+                    raffleCards.appendChild(card);
+                });
+            }
+
+            const card = document.getElementById('manualDestinations');
+            if (card) {
+                card.innerHTML = '';
+                if (walletConfig.destinations.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'manual-info-row';
+                    empty.textContent = 'No payment accounts are configured yet. Please contact support.';
+                    card.appendChild(empty);
+                } else {
+                    walletConfig.destinations.forEach(d => card.appendChild(renderDestinationRow(d)));
+                }
+            }
+
+            const select = document.getElementById('manualDestinationSelect');
+            if (select) {
+                const previous = select.value;
+                select.innerHTML = '';
+                walletConfig.destinations.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id;
+                    opt.textContent = d.bank_name + ' · ' + d.account_number;
+                    select.appendChild(opt);
+                });
+                if (previous) select.value = previous;
+            }
+
+            const notice = document.getElementById('manualDepositNotice');
+            if (notice && walletConfig.notice) notice.textContent = walletConfig.notice;
+
+            const limits = walletConfig.limits;
+            if (limits) {
+                const amountInput = document.getElementById('manualAmountInput');
+                if (amountInput) {
+                    amountInput.min = limits.deposit_min;
+                    amountInput.max = limits.deposit_max;
+                    amountInput.placeholder = 'e.g. ' + limits.deposit_min;
+                }
+                const wdInput = document.getElementById('wdAmountInput');
+                if (wdInput) {
+                    wdInput.min = limits.withdraw_min;
+                    wdInput.max = limits.withdraw_max;
+                }
+                const wdNote = document.getElementById('wdLimitsNote');
+                if (wdNote) {
+                    wdNote.textContent = 'Withdraw between ' + limits.withdraw_min + ' and ' + limits.withdraw_max +
+                        ' ETB • The amount is reserved immediately and paid out manually after review';
+                }
+            }
+
+            // The legacy automatic gateway only appears when an operator enabled it.
+            const chapaTab = document.getElementById('depTabChapa');
+            if (chapaTab) {
+                chapaTab.style.display = walletConfig.chapa_enabled ? '' : 'none';
+                if (!walletConfig.chapa_enabled && activeDepTab !== 'manual') switchDepTab('manual');
+            }
+        }
+
         function showDepositModal() {
             document.getElementById('depositModal').classList.add('active');
+            switchDepTab('manual');
+            loadPaymentConfig();
         }
 
         function closeDepositModal() {
             document.getElementById('depositModal').classList.remove('active');
+            resetDepositProof();
+            const status = document.getElementById('manualDepStatus');
+            if (status) { status.style.display = 'none'; status.textContent = ''; }
+        }
+
+        function resetDepositProof() {
             depScreenshotFile = null;
-            document.getElementById('depFileInput').value = '';
-            document.getElementById('depZoneIcon').textContent = '📤';
-            document.getElementById('depZoneText').textContent = 'Tap to upload screenshot';
-            document.getElementById('depScreenshotZone').classList.remove('has-file');
+            const input = document.getElementById('depFileInput');
+            if (input) input.value = '';
+            const icon = document.getElementById('depZoneIcon');
+            if (icon) icon.textContent = '📤';
+            const text = document.getElementById('depZoneText');
+            if (text) text.textContent = 'Tap to upload screenshot';
+            const zone = document.getElementById('depScreenshotZone');
+            if (zone) zone.classList.remove('has-file');
+            const preview = document.getElementById('depProofPreview');
+            if (preview) {
+                if (preview.dataset.objectUrl) { URL.revokeObjectURL(preview.dataset.objectUrl); delete preview.dataset.objectUrl; }
+                preview.style.display = 'none';
+                preview.removeAttribute('src');
+            }
         }
 
         function showWithdrawModal() {
             document.getElementById('withdrawModal').classList.add('active');
+            loadPaymentConfig();
         }
 
         function closeWithdrawModal() {
             document.getElementById('withdrawModal').classList.remove('active');
+            const status = document.getElementById('wdStatus');
+            if (status) { status.style.display = 'none'; status.textContent = ''; }
         }
 
-        let activeDepTab = 'chapa';
+        let activeDepTab = 'manual';
         function switchDepTab(tab) {
             activeDepTab = tab;
-            document.getElementById('depTabChapa').classList.toggle('active', tab === 'chapa');
-            document.getElementById('depTabManual').classList.toggle('active', tab === 'manual');
-            document.getElementById('depFormChapa').style.display = tab === 'chapa' ? 'flex' : 'none';
-            document.getElementById('depFormManual').style.display = tab === 'manual' ? 'flex' : 'none';
-        }
-
-        let selectedManualMethod = 'telebirr';
-        function selectManualMethod(m) {
-            selectedManualMethod = m;
-            ['telebirr','dashen','cbe'].forEach(id => {
-                document.getElementById('manMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
-            });
+            const chapaTab = document.getElementById('depTabChapa');
+            const manualTab = document.getElementById('depTabManual');
+            if (chapaTab) chapaTab.classList.toggle('active', tab === 'chapa');
+            if (manualTab) manualTab.classList.toggle('active', tab === 'manual');
+            const chapaForm = document.getElementById('depFormChapa');
+            const manualForm = document.getElementById('depFormManual');
+            if (chapaForm) chapaForm.style.display = tab === 'chapa' ? 'flex' : 'none';
+            if (manualForm) manualForm.style.display = tab === 'manual' ? 'flex' : 'none';
         }
 
         let selectedWdMethod = 'telebirr';
         function selectWdMethod(m) {
-            selectedWdMethod = m;
-            ['telebirr','dashen','cbe'].forEach(id => {
-                document.getElementById('wdMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
-            });
+            selectedWdMethod = m === 'bank' ? 'bank' : 'telebirr';
+            const telebirrBtn = document.getElementById('wdMethTelebirr');
+            const bankBtn = document.getElementById('wdMethBank');
+            if (telebirrBtn) telebirrBtn.classList.toggle('active', selectedWdMethod === 'telebirr');
+            if (bankBtn) bankBtn.classList.toggle('active', selectedWdMethod === 'bank');
+            const bankRow = document.getElementById('wdBankRow');
+            if (bankRow) bankRow.style.display = selectedWdMethod === 'bank' ? 'block' : 'none';
+            const label = document.getElementById('wdAccountLabel');
+            if (label) label.textContent = selectedWdMethod === 'bank' ? 'bank account number' : 'Telebirr number';
         }
 
+        const PROOF_MAX_BYTES = 6 * 1024 * 1024;
+        const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
         let depScreenshotFile = null;
+
         function handleDepFile(event) {
-            const file = event.target.files[0];
+            const file = event.target.files && event.target.files[0];
             if (!file) return;
+            if (PROOF_TYPES.indexOf(file.type) === -1) {
+                showToast('❌ Only JPG, PNG or WebP images are accepted');
+                resetDepositProof();
+                return;
+            }
+            if (file.size > PROOF_MAX_BYTES) {
+                showToast('❌ The screenshot must be smaller than 6 MB');
+                resetDepositProof();
+                return;
+            }
             depScreenshotFile = file;
             document.getElementById('depZoneIcon').textContent = '✅';
             document.getElementById('depZoneText').textContent = file.name;
             document.getElementById('depScreenshotZone').classList.add('has-file');
+            const preview = document.getElementById('depProofPreview');
+            if (preview && typeof URL.createObjectURL === 'function') {
+                if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+                const objectUrl = URL.createObjectURL(file);
+                preview.dataset.objectUrl = objectUrl;
+                preview.src = objectUrl;
+                preview.style.display = 'block';
+            }
         }
 
         async function initChapaDeposit() {
@@ -3887,73 +4090,276 @@
             }
         }
 
+        function setManualDepositStatus(text) {
+            const status = document.getElementById('manualDepStatus');
+            if (!status) return;
+            status.textContent = text || '';
+            status.style.display = text ? 'block' : 'none';
+        }
+
+        /** Uploads the proof with progress reporting. Resolves with { status, data }. */
+        function uploadProof(formData, onProgress) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/deposits/manual');
+                xhr.setRequestHeader('Authorization', 'Bearer ' + AUTH_TOKEN);
+                if (xhr.upload && typeof onProgress === 'function') {
+                    xhr.upload.onprogress = function (e) {
+                        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+                    };
+                }
+                xhr.onload = function () {
+                    let data = null;
+                    try { data = JSON.parse(xhr.responseText); } catch (_e) { data = null; }
+                    resolve({ status: xhr.status, data });
+                };
+                xhr.onerror = function () { reject(new Error('network')); };
+                xhr.send(formData);
+            });
+        }
+
+        // The same idempotency key is reused while a submission is being retried
+        // so a flaky connection can not create two reviewable requests.
+        let manualDepositKey = null;
+
         async function submitManualDeposit() {
             if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            await loadPaymentConfig();
+            const limits = walletConfig.limits || { deposit_min: 10, deposit_max: 50000 };
             const amount = Number(document.getElementById('manualAmountInput').value);
-            if (!amount || amount < 10) { showToast('Minimum deposit is 10 ETB'); return; }
-            if (!depScreenshotFile) { showToast('Please upload payment receipt'); return; }
+            if (!Number.isFinite(amount) || amount < limits.deposit_min || amount > limits.deposit_max) {
+                showToast('❌ Deposit must be between ' + limits.deposit_min + ' and ' + limits.deposit_max + ' ETB');
+                return;
+            }
+            const destinationSelect = document.getElementById('manualDestinationSelect');
+            const destinationId = destinationSelect ? destinationSelect.value : '';
+            if (!destinationId) { showToast('❌ Choose where you sent the money'); return; }
+            const senderReference = document.getElementById('manualSenderRef').value.trim();
+            if (senderReference.length < 4) { showToast('❌ Enter the phone or account you sent from'); return; }
+            if (!depScreenshotFile) { showToast('❌ Attach your payment receipt'); return; }
 
             const btn = document.getElementById('manualDepBtn');
+            if (btn.disabled) return;
             btn.disabled = true;
-            btn.textContent = '⏳ Submitting...';
+            btn.textContent = '⏳ Uploading...';
+            manualDepositKey = manualDepositKey || makeIdempotencyKey();
+            setManualDepositStatus('Uploading proof… 0%');
 
             try {
                 const fd = new FormData();
-                fd.append('amount', amount);
-                fd.append('payment_method', selectedManualMethod);
+                fd.append('amount', String(amount));
+                fd.append('destination_id', destinationId);
+                fd.append('sender_reference', senderReference);
+                fd.append('external_reference', document.getElementById('manualExternalRef').value.trim());
+                fd.append('note', document.getElementById('manualNote').value.trim());
+                fd.append('idempotency_key', manualDepositKey);
                 fd.append('screenshot', depScreenshotFile);
-                const resp = await fetch('/api/deposits/manual', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
-                    body: fd
-                });
-                const data = await readJsonResponse(resp, 'Manual deposit');
-                if (resp.ok && data && data.ok) {
-                    showToast('✅ Deposit submitted! Admin will confirm shortly.');
+
+                const { status, data } = await uploadProof(fd, p => setManualDepositStatus('Uploading proof… ' + p + '%'));
+                if (status >= 200 && status < 300 && data && data.ok) {
+                    manualDepositKey = null;
+                    showToast('✅ ' + (data.message || 'Proof submitted for review'));
+                    setManualDepositStatus('');
                     closeDepositModal();
+                    document.getElementById('manualAmountInput').value = '';
+                    document.getElementById('manualExternalRef').value = '';
+                    document.getElementById('manualNote').value = '';
+                    await refreshWalletViews();
+                } else if (status === 409) {
+                    manualDepositKey = null;
+                    showToast('❌ ' + ((data && data.error) || 'This transfer was already submitted'));
+                    setManualDepositStatus('Already submitted — check your request history.');
                 } else {
-                    showToast('❌ ' + (data?.error || 'Submission failed'));
+                    showToast('❌ ' + ((data && data.error) || 'Submission failed'));
+                    setManualDepositStatus('Submission failed. You can try again.');
                 }
             } catch (_e) {
-                showToast('❌ Network error');
+                showToast('❌ Network error – please retry');
+                setManualDepositStatus('Upload interrupted. Tap submit to retry safely.');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '📨 Submit for Review';
+                btn.textContent = '📨 Submit Proof for Review';
             }
         }
 
+        let withdrawalKey = null;
+
         async function submitWithdrawal() {
             if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            await loadPaymentConfig();
+            const limits = walletConfig.limits || { withdraw_min: 50, withdraw_max: 25000 };
             const amount = Number(document.getElementById('wdAmountInput').value);
-            if (!amount || amount < 50) { showToast('Minimum withdrawal is 50 ETB'); return; }
+            if (!Number.isFinite(amount) || amount < limits.withdraw_min || amount > limits.withdraw_max) {
+                showToast('❌ Withdrawal must be between ' + limits.withdraw_min + ' and ' + limits.withdraw_max + ' ETB');
+                return;
+            }
             const account_number = document.getElementById('wdAccountNum').value.trim();
             const account_name = document.getElementById('wdAccountName').value.trim();
-            if (!account_number || !account_name) { showToast('Account number and name are required'); return; }
+            const bank_name = document.getElementById('wdBankName').value.trim();
+            if (!account_number || account_name.length < 2) { showToast('❌ Account number and holder name are required'); return; }
+            if (selectedWdMethod === 'bank' && bank_name.length < 2) { showToast('❌ Enter your bank name'); return; }
 
             const btn = document.getElementById('wdSubmitBtn');
+            if (btn.disabled) return;
             btn.disabled = true;
             btn.textContent = '⏳ Submitting...';
+            withdrawalKey = withdrawalKey || makeIdempotencyKey();
 
             try {
                 const resp = await fetch('/api/withdrawals', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
-                    body: JSON.stringify({ amount, payment_method: selectedWdMethod, account_number, account_name })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN,
+                        'Idempotency-Key': withdrawalKey
+                    },
+                    body: JSON.stringify({
+                        amount,
+                        destination_type: selectedWdMethod,
+                        bank_name: selectedWdMethod === 'bank' ? bank_name : undefined,
+                        account_number,
+                        account_name,
+                        note: document.getElementById('wdNote').value.trim() || undefined
+                    })
                 });
                 const data = await readJsonResponse(resp, 'Withdrawal');
                 if (resp.ok && data && data.ok) {
-                    showToast('✅ Withdrawal requested! Will be processed in 24h.');
+                    withdrawalKey = null;
+                    showToast('✅ ' + (data.message || 'Withdrawal requested'));
                     closeWithdrawModal();
-                    refreshBalance();
+                    document.getElementById('wdAmountInput').value = '';
+                    if (typeof data.balance === 'number') applyBalance(data.balance);
+                    await refreshWalletViews();
                 } else {
                     showToast('❌ ' + (data?.error || 'Request failed'));
+                    const status = document.getElementById('wdStatus');
+                    if (status) { status.textContent = (data && data.error) || 'Request failed'; status.style.display = 'block'; }
                 }
             } catch (_e) {
-                showToast('❌ Network error');
+                showToast('❌ Network error – please retry');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💸 Request Withdrawal';
             }
+        }
+
+        // ===== MANUAL REQUEST HISTORY =====
+        let requestFilter = 'deposits';
+        let requestPage = 1;
+
+        function setRequestFilter(filter) {
+            requestFilter = filter === 'withdrawals' ? 'withdrawals' : 'deposits';
+            document.querySelectorAll('#reqFilters .bet-quick').forEach(b => {
+                b.classList.toggle('active', b.dataset.reqFilter === requestFilter);
+            });
+            loadRequests(1);
+        }
+
+        function requestStatusEmoji(status) {
+            if (status === 'approved' || status === 'paid' || status === 'completed') return '✅';
+            if (status === 'rejected') return '❌';
+            if (status === 'cancelled') return '🚫';
+            if (status === 'processing') return '🔄';
+            return '⏳';
+        }
+
+        function renderRequestItem(row, kind) {
+            const el = document.createElement('div');
+            el.className = 'tx-item';
+            const icon = document.createElement('div');
+            icon.className = 'tx-icon';
+            icon.textContent = kind === 'deposits' ? '🧾' : '💸';
+            const info = document.createElement('div');
+            info.className = 'tx-info';
+            const desc = document.createElement('div');
+            desc.className = 'tx-desc';
+            const label = kind === 'deposits'
+                ? 'Manual deposit' + (row.destination_id ? ' · ' + row.destination_id : '')
+                : 'Withdrawal' + (row.bank_name ? ' · ' + row.bank_name : '');
+            desc.textContent = requestStatusEmoji(row.status) + ' ' + label + ' — ' + row.status;
+            const date = document.createElement('div');
+            date.className = 'tx-date';
+            date.textContent = new Date(row.created_at).toLocaleDateString('en-ET', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            info.appendChild(desc);
+            info.appendChild(date);
+            if (row.review_reason || row.admin_notes) {
+                const reason = document.createElement('div');
+                reason.className = 'tx-date';
+                reason.textContent = row.review_reason || row.admin_notes;
+                info.appendChild(reason);
+            }
+            const amount = document.createElement('div');
+            amount.className = 'tx-amount ' + (kind === 'deposits' ? 'positive' : 'negative');
+            amount.textContent = (kind === 'deposits' ? '+' : '-') + row.amount + ' ETB';
+            el.appendChild(icon);
+            el.appendChild(info);
+            el.appendChild(amount);
+            if (kind === 'withdrawals' && row.status === 'pending') {
+                const cancel = document.createElement('button');
+                cancel.className = 'mir-copy';
+                cancel.type = 'button';
+                cancel.textContent = 'Cancel';
+                cancel.addEventListener('click', function () { cancelWithdrawal(row.id, cancel); });
+                el.appendChild(cancel);
+            }
+            return el;
+        }
+
+        async function loadRequests(page) {
+            const list = document.getElementById('requestList');
+            const moreBtn = document.getElementById('reqMoreBtn');
+            if (!list || !AUTH_TOKEN) return;
+            const targetPage = Math.max(1, parseInt(page, 10) || 1);
+            const append = targetPage > 1;
+            if (!append) list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            try {
+                const endpoint = requestFilter === 'withdrawals' ? '/api/withdrawals' : '/api/deposits/manual';
+                const params = new URLSearchParams({ page: String(targetPage), limit: '20' });
+                const resp = await fetch(endpoint + '?' + params.toString(), { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Requests');
+                if (!resp.ok || !data || !data.ok) {
+                    if (!append) list.innerHTML = '<div class="tx-empty">Failed to load requests</div>';
+                    return;
+                }
+                requestPage = targetPage;
+                const rows = (requestFilter === 'withdrawals' ? data.withdrawals : data.deposits) || [];
+                if (!append) list.innerHTML = '';
+                if (!append && rows.length === 0) {
+                    list.innerHTML = '<div class="tx-empty">No requests yet</div>';
+                }
+                rows.forEach(row => list.appendChild(renderRequestItem(row, requestFilter)));
+                if (moreBtn) moreBtn.style.display = (targetPage * 20) < (data.total || 0) ? 'block' : 'none';
+            } catch (_e) {
+                if (!append) list.innerHTML = '<div class="tx-empty">Error loading requests</div>';
+            }
+        }
+
+        async function cancelWithdrawal(id, btn) {
+            if (btn) btn.disabled = true;
+            try {
+                const resp = await fetch('/api/withdrawals/' + encodeURIComponent(id) + '/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Cancel withdrawal');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ ' + (data.message || 'Withdrawal cancelled'));
+                    await refreshWalletViews();
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Could not cancel'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Keeps every balance on screen in sync without a page reload.
+        async function refreshWalletViews() {
+            await loadWalletSummary();
+            await loadRequests(1);
+            await loadTransactions(1);
         }
 
         function copyManual(text, btn) {

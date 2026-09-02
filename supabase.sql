@@ -548,3 +548,289 @@ on conflict (id) do nothing;
 
 -- IMPORTANT: Set the bucket to public only if screenshot URLs must be directly accessible.
 -- Consider restricting uploads to authenticated service role only via storage policies.
+
+
+-- =====================================================================
+-- ===== MANUAL DEPOSIT / WITHDRAWAL WORKFLOW (safe to re-run) =========
+-- =====================================================================
+-- Everything below is idempotent: run the whole file again after a deploy.
+
+-- --- Manual deposit columns -----------------------------------------
+alter table deposits add column if not exists destination_id text;
+alter table deposits add column if not exists sender_reference text;
+alter table deposits add column if not exists external_reference text;
+alter table deposits add column if not exists note text;
+alter table deposits add column if not exists proof_path text;
+alter table deposits add column if not exists proof_mime text;
+alter table deposits add column if not exists idempotency_key text;
+alter table deposits add column if not exists reviewed_by text;
+alter table deposits add column if not exists reviewed_at timestamptz;
+alter table deposits add column if not exists review_reason text;
+
+alter table deposits drop constraint if exists deposits_payment_method_check;
+alter table deposits add constraint deposits_payment_method_check
+  check (payment_method in ('telebirr', 'bank', 'dashen', 'cbe', 'chapa'));
+
+alter table deposits drop constraint if exists deposits_status_check;
+alter table deposits add constraint deposits_status_check
+  check (status in ('pending', 'completed', 'failed', 'rejected', 'cancelled'));
+
+-- One pending/approved request per external transaction reference per user, and
+-- one request per idempotency key: retries and double taps can not create a
+-- second reviewable record for the same transfer.
+create unique index if not exists deposits_user_external_reference_idx
+  on deposits(user_id, external_reference) where external_reference is not null;
+create unique index if not exists deposits_user_idempotency_idx
+  on deposits(user_id, idempotency_key) where idempotency_key is not null;
+create index if not exists deposits_destination_idx on deposits(destination_id);
+
+-- --- Manual withdrawal columns --------------------------------------
+alter table withdrawals add column if not exists bank_name text;
+alter table withdrawals add column if not exists note text;
+alter table withdrawals add column if not exists payment_reference text;
+alter table withdrawals add column if not exists reviewed_by text;
+alter table withdrawals add column if not exists reviewed_at timestamptz;
+
+alter table withdrawals drop constraint if exists withdrawals_payment_method_check;
+alter table withdrawals add constraint withdrawals_payment_method_check
+  check (payment_method in ('telebirr', 'bank', 'dashen', 'cbe'));
+
+alter table withdrawals drop constraint if exists withdrawals_status_check;
+alter table withdrawals add constraint withdrawals_status_check
+  check (status in ('pending', 'processing', 'paid', 'completed', 'rejected', 'cancelled'));
+
+-- --- create_manual_deposit -------------------------------------------
+-- Creates the pending request atomically with its duplicate/idempotency guards.
+-- It never touches `users.balance`: uploading proof can not credit a wallet.
+create or replace function create_manual_deposit(
+  p_user_id uuid,
+  p_amount numeric,
+  p_tx_ref text,
+  p_destination_id text,
+  p_payment_method text,
+  p_sender_reference text,
+  p_external_reference text,
+  p_note text,
+  p_idempotency_key text
+) returns table(deposit_id uuid, tx_ref text, replayed boolean)
+language plpgsql as $$
+declare
+  existing deposits%rowtype;
+  new_id uuid;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Invalid amount';
+  end if;
+
+  if p_idempotency_key is not null then
+    select * into existing from deposits
+      where user_id = p_user_id and idempotency_key = p_idempotency_key;
+    if found then
+      return query select existing.id, existing.tx_ref, true;
+      return;
+    end if;
+  end if;
+
+  if p_external_reference is not null then
+    select * into existing from deposits
+      where user_id = p_user_id and external_reference = p_external_reference;
+    if found then
+      raise exception 'Duplicate transaction reference';
+    end if;
+  end if;
+
+  insert into deposits (
+    user_id, amount, tx_ref, payment_method, destination_id, sender_reference,
+    external_reference, note, idempotency_key, status
+  ) values (
+    p_user_id, p_amount, p_tx_ref, p_payment_method, p_destination_id, p_sender_reference,
+    p_external_reference, p_note, p_idempotency_key, 'pending'
+  ) returning id into new_id;
+
+  return query select new_id, p_tx_ref, false;
+end;
+$$;
+
+-- --- review_manual_deposit -------------------------------------------
+-- The only path that credits a manual deposit. The `pending` guard plus the row
+-- lock mean concurrent admins, retries and refreshes credit exactly once.
+create or replace function review_manual_deposit(
+  p_deposit_id uuid,
+  p_action text,
+  p_reviewer text,
+  p_reason text
+) returns table(reviewed boolean, credited boolean, user_id uuid, amount numeric)
+language plpgsql as $$
+declare
+  dep deposits%rowtype;
+begin
+  if p_action not in ('approve', 'reject') then
+    raise exception 'Invalid action';
+  end if;
+
+  select * into dep from deposits where id = p_deposit_id for update;
+  if not found then
+    raise exception 'Deposit not found';
+  end if;
+  if dep.status <> 'pending' then
+    return query select false, false, dep.user_id, dep.amount;
+    return;
+  end if;
+
+  if p_action = 'reject' then
+    update deposits set
+      status = 'rejected',
+      review_reason = p_reason,
+      reviewed_by = p_reviewer,
+      reviewed_at = now(),
+      updated_at = now()
+    where id = dep.id;
+    return query select true, false, dep.user_id, dep.amount;
+    return;
+  end if;
+
+  update deposits set
+    status = 'completed',
+    review_reason = p_reason,
+    reviewed_by = p_reviewer,
+    reviewed_at = now(),
+    updated_at = now()
+  where id = dep.id;
+
+  update users set balance = balance + dep.amount, updated_at = now() where id = dep.user_id;
+  insert into transactions(user_id, amount, type, description)
+  values (dep.user_id, dep.amount, 'deposit', 'Manual deposit approved (' || dep.tx_ref || ')');
+
+  return query select true, true, dep.user_id, dep.amount;
+end;
+$$;
+
+-- --- request_withdrawal (manual payout fields) ------------------------
+-- Replaces the earlier six-argument version.
+drop function if exists request_withdrawal(uuid, numeric, text, text, text, text);
+create or replace function request_withdrawal(
+  p_user_id uuid,
+  p_amount numeric,
+  p_payment_method text,
+  p_account_number text,
+  p_account_name text,
+  p_bank_name text,
+  p_note text,
+  p_idempotency_key text
+) returns table(withdrawal_id uuid, balance_after_cents bigint, replayed boolean)
+language plpgsql as $$
+declare
+  existing withdrawals%rowtype;
+  cur_balance numeric;
+  new_balance numeric;
+  new_id uuid;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Invalid amount';
+  end if;
+
+  if p_idempotency_key is not null then
+    select * into existing from withdrawals
+      where user_id = p_user_id and idempotency_key = p_idempotency_key;
+    if found then
+      select balance into cur_balance from users where id = p_user_id;
+      return query select existing.id, round(cur_balance * 100)::bigint, true;
+      return;
+    end if;
+  end if;
+
+  -- Row lock + funds check + debit in one transaction: the same balance can
+  -- never be reserved twice by concurrent requests.
+  select balance into cur_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'User not found';
+  end if;
+  if cur_balance < p_amount then
+    raise exception 'Insufficient balance';
+  end if;
+
+  new_balance := cur_balance - p_amount;
+  update users set balance = new_balance, updated_at = now() where id = p_user_id;
+
+  insert into withdrawals(
+    user_id, amount, payment_method, account_number, account_name,
+    bank_name, note, status, idempotency_key
+  ) values (
+    p_user_id, p_amount, p_payment_method, p_account_number, p_account_name,
+    p_bank_name, p_note, 'pending', p_idempotency_key
+  ) returning id into new_id;
+
+  insert into transactions(user_id, amount, type, description)
+  values (p_user_id, -p_amount, 'withdrawal', 'Withdrawal reserved for ' || coalesce(p_bank_name, p_payment_method));
+
+  return query select new_id, round(new_balance * 100)::bigint, false;
+end;
+$$;
+
+-- --- resolve_withdrawal (manual payout states) ------------------------
+-- Validates every transition, refunds exactly once and never debits twice.
+drop function if exists resolve_withdrawal(uuid, text, uuid, text);
+create or replace function resolve_withdrawal(
+  p_withdrawal_id uuid,
+  p_status text,
+  p_user_id uuid,
+  p_admin_notes text,
+  p_reviewer text,
+  p_payment_reference text
+) returns table(resolved boolean, refunded boolean)
+language plpgsql as $$
+declare
+  wd withdrawals%rowtype;
+begin
+  if p_status not in ('processing', 'paid', 'completed', 'rejected', 'cancelled') then
+    raise exception 'Invalid status';
+  end if;
+
+  select * into wd from withdrawals where id = p_withdrawal_id for update;
+  if not found then
+    raise exception 'Withdrawal not found';
+  end if;
+  if p_user_id is not null and wd.user_id <> p_user_id then
+    raise exception 'Withdrawal not found';
+  end if;
+
+  -- Allowed transitions: pending -> anything, processing -> terminal states.
+  if wd.status not in ('pending', 'processing') then
+    return query select false, false;
+    return;
+  end if;
+  if wd.status = 'processing' and p_status = 'processing' then
+    return query select false, false;
+    return;
+  end if;
+
+  update withdrawals set
+    status = p_status,
+    admin_notes = coalesce(p_admin_notes, admin_notes),
+    payment_reference = coalesce(p_payment_reference, payment_reference),
+    reviewed_by = coalesce(p_reviewer, reviewed_by),
+    reviewed_at = case when p_status = 'processing' then reviewed_at else now() end,
+    updated_at = now()
+  where id = p_withdrawal_id;
+
+  -- Only rejection/cancellation returns money, and only from a state that still
+  -- holds the reservation, so a refund can never happen twice.
+  if p_status in ('rejected', 'cancelled') then
+    update users set balance = balance + wd.amount, updated_at = now() where id = wd.user_id;
+    insert into transactions(user_id, amount, type, description)
+    values (wd.user_id, wd.amount, 'withdrawal_refund', 'Withdrawal ' || p_status || ' – balance refunded');
+    return query select true, true;
+    return;
+  end if;
+
+  return query select true, false;
+end;
+$$;
+
+-- ===== STORAGE – PRIVATE PROOF BUCKET =====
+-- Deposit proofs must never be publicly enumerable; the backend serves them
+-- through short-lived signed URLs only.
+insert into storage.buckets (id, name, public)
+values ('deposit-proofs', 'deposit-proofs', false)
+on conflict (id) do nothing;
+update storage.buckets set public = false where id = 'deposit-proofs';

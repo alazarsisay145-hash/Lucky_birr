@@ -14,6 +14,7 @@ const { createClient } = require('@supabase/supabase-js');
 const rng = require('./lib/rng');
 const gameMath = require('./lib/gameMath');
 const fastKeno = require('./lib/fastKeno');
+const paymentDestinations = require('./lib/paymentDestinations');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 10000;
@@ -149,7 +150,11 @@ const upload = multer({
   fileFilter(_req, file, cb) {
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error('Only png, jpg, jpeg, and webp images are allowed'));
+      // Surfaced as a 400 rather than a 500: an unsupported upload is a client
+      // error, and the message is safe to show.
+      const err = new Error('Only png, jpg, jpeg, and webp images are allowed');
+      err.statusCode = 400;
+      return cb(err);
     }
     return cb(null, true);
   }
@@ -576,12 +581,17 @@ app.post('/api/submissions', verifyJWT, submitRateLimit, upload.single('screensh
   }
 });
 
-// ===== CHAPA PAYMENT =====
+// ===== CHAPA PAYMENT (legacy, disabled unless explicitly enabled) =====
+// The product runs on the manual deposit/withdrawal workflow. The automatic
+// gateway stays in the codebase but every route is inert unless an operator
+// sets CHAPA_ENABLED=true *and* provides a secret key, so a stray callback or
+// browser request can never move money on a manual-only deployment.
 const CHAPA_SECRET_KEY = process.env.CHAPA_SECRET_KEY || '';
 const CHAPA_API_URL = 'https://api.chapa.co/v1';
+const CHAPA_ENABLED = process.env.CHAPA_ENABLED === 'true' && Boolean(CHAPA_SECRET_KEY);
 
-if (!CHAPA_SECRET_KEY) {
-  console.warn('CHAPA_SECRET_KEY is missing. Payment gateway features will not work.');
+if (process.env.CHAPA_ENABLED === 'true' && !CHAPA_SECRET_KEY) {
+  console.warn('CHAPA_ENABLED is true but CHAPA_SECRET_KEY is missing. Automatic deposits stay disabled.');
 }
 
 // Wallet limits are deploy-time configuration only — they are never read from
@@ -599,6 +609,28 @@ const WALLET_LIMITS = {
 };
 
 const PAYMENT_METHODS = ['telebirr', 'dashen', 'cbe'];
+
+// ===== MANUAL PAYMENT DESTINATIONS =====
+// Parsed and validated once, at startup, from server-side configuration only.
+const manualPaymentConfig = paymentDestinations.loadDestinations();
+manualPaymentConfig.warnings.forEach((warning) => console.warn(warning));
+const MANUAL_PAYMENT_DESTINATIONS = manualPaymentConfig.destinations;
+const MANUAL_DESTINATION_BY_ID = new Map(MANUAL_PAYMENT_DESTINATIONS.map((d) => [d.id, d]));
+// Proof screenshots live in their own private bucket so they can never be
+// enumerated or read without a short-lived, server-issued signed URL.
+const MANUAL_PROOF_BUCKET = process.env.MANUAL_PROOF_BUCKET || 'deposit-proofs';
+const PROOF_SIGNED_URL_TTL_SECONDS = 300;
+const MANUAL_DEPOSIT_NOTICE =
+  'Transfer the money yourself using one of the accounts above, then submit your receipt here. ' +
+  'Proof is verified manually by an operator — submitting it does not credit your wallet and does not guarantee approval.';
+
+const proofUploadRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many proof uploads, please try again later.' }
+});
 
 const walletRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -690,8 +722,8 @@ app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res
     if (currency !== 'ETB') {
       return res.status(400).json({ error: 'Only ETB deposits are supported' });
     }
-    if (!CHAPA_SECRET_KEY) {
-      return res.status(503).json({ error: 'Payment gateway not configured' });
+    if (!CHAPA_ENABLED) {
+      return res.status(503).json({ error: 'Automatic deposits are disabled. Please use the manual deposit flow.' });
     }
     if (!supabase) {
       return res.status(503).json({ error: 'Database not configured' });
@@ -783,6 +815,8 @@ app.post('/api/deposits/callback', async (req, res) => {
     if (!tx_ref || typeof tx_ref !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(tx_ref)) {
       return res.sendStatus(400);
     }
+    // A callback can never credit anything while the gateway is switched off.
+    if (!CHAPA_ENABLED) return res.sendStatus(503);
     if (!supabase) return res.sendStatus(503);
 
     if (status === 'failed' || status === 'cancelled') {
@@ -819,7 +853,7 @@ app.get('/api/deposits/:txRef/status', verifyJWT, walletRateLimit, async (req, r
     if (!dep || dep.user_id !== req.user.id) return res.status(404).json({ error: 'Deposit not found' });
 
     let status = dep.status;
-    if (status === 'pending' && CHAPA_SECRET_KEY) {
+    if (status === 'pending' && CHAPA_ENABLED) {
       const outcome = await verifyAndCreditDeposit(dep.tx_ref);
       status = outcome.status || status;
     }
@@ -829,78 +863,308 @@ app.get('/api/deposits/:txRef/status', verifyJWT, walletRateLimit, async (req, r
   }
 });
 
-// ===== DEPOSIT – MANUAL (screenshot upload, for non-Chapa) =====
-app.post('/api/deposits/manual', verifyJWT, submitRateLimit, upload.single('screenshot'), async (req, res, next) => {
+// ===== MANUAL PAYMENTS – PUBLIC DESTINATION LIST =====
+// Read-only. Returns just the details a player needs in order to transfer the
+// money; the configuration itself never leaves the server and nothing here can
+// be written from a request.
+app.get('/api/payment/destinations', verifyJWT, (_req, res) => {
+  res.json({
+    ok: true,
+    destinations: paymentDestinations.publicView(MANUAL_PAYMENT_DESTINATIONS),
+    chapa_enabled: CHAPA_ENABLED,
+    limits: {
+      deposit_min: WALLET_LIMITS.depositMin,
+      deposit_max: WALLET_LIMITS.depositMax,
+      withdraw_min: WALLET_LIMITS.withdrawMin,
+      withdraw_max: WALLET_LIMITS.withdrawMax
+    },
+    notice: MANUAL_DEPOSIT_NOTICE
+  });
+});
+
+const PROOF_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+const SENDER_REFERENCE_PATTERN = /^[A-Za-z0-9+\-_. ]{4,64}$/;
+const EXTERNAL_REFERENCE_PATTERN = /^[A-Za-z0-9\-_.]{4,64}$/;
+
+/**
+ * Validates a manual deposit payload. Everything the wallet later relies on
+ * (amount, destination, references) is derived here from server-side rules, so
+ * the browser can only ever choose between configured destinations.
+ */
+function validateManualDepositPayload(body) {
+  const amountNum = Number(body.amount);
+  if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.depositMin || amountNum > WALLET_LIMITS.depositMax) {
+    return { error: `Deposit must be between ${WALLET_LIMITS.depositMin} and ${WALLET_LIMITS.depositMax} ETB` };
+  }
+
+  const destinationId = String(body.destination_id || '').trim().toLowerCase();
+  const destination = MANUAL_DESTINATION_BY_ID.get(destinationId);
+  if (!destination) {
+    return { error: 'Choose one of the listed payment destinations' };
+  }
+
+  const senderReference = String(body.sender_reference || '').trim();
+  if (!SENDER_REFERENCE_PATTERN.test(senderReference)) {
+    return { error: 'Enter the phone number or account you sent the money from' };
+  }
+
+  const externalRaw = String(body.external_reference || '').trim();
+  if (externalRaw && !EXTERNAL_REFERENCE_PATTERN.test(externalRaw)) {
+    return { error: 'The transaction reference contains unsupported characters' };
+  }
+
+  const note = String(body.note || '').trim().slice(0, 300);
+
+  return {
+    value: {
+      amount: Math.round(amountNum * 100) / 100,
+      destination,
+      senderReference,
+      externalReference: externalRaw || null,
+      note: note || null
+    }
+  };
+}
+
+/** Storage keys are generated entirely server-side – no user input, no traversal. */
+function manualProofPath(userId, depositId, mimetype) {
+  return `manual-deposits/${userId}/${depositId}.${mimeToExtension(mimetype)}`;
+}
+
+// ===== DEPOSIT – MANUAL PROOF SUBMISSION =====
+// Creates a *pending* request only. No code path here touches the balance:
+// crediting happens exclusively in `review_manual_deposit` after an admin
+// approves the request.
+app.post('/api/deposits/manual', verifyJWT, proofUploadRateLimit, upload.single('screenshot'), async (req, res, next) => {
   try {
+    const parsed = validateManualDepositPayload(req.body || {});
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { amount, destination, senderReference, externalReference, note } = parsed.value;
+
+    if (!req.file) return res.status(400).json({ error: 'Attach a screenshot of your transfer' });
+    if (!PROOF_MIME_TYPES.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Only png, jpg, jpeg, and webp images are allowed' });
+    }
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
-    const { amount, payment_method } = req.body || {};
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.depositMin || amountNum > WALLET_LIMITS.depositMax) {
-      return res.status(400).json({
-        error: `Deposit must be between ${WALLET_LIMITS.depositMin} and ${WALLET_LIMITS.depositMax} ETB`
+    const idempotencyKey = requestIdempotencyKey(req) || randomUUID();
+    const txRef = `LB-MAN-${req.user.id.slice(0, 8)}-${Date.now()}`;
+
+    // The pending row is created first, atomically with the duplicate and
+    // idempotency guards, so a retry or a double tap can never open a second
+    // request for the same transfer.
+    const { data: rows, error: rpcErr } = await supabase.rpc('create_manual_deposit', {
+      p_user_id: req.user.id,
+      p_amount: amount,
+      p_tx_ref: txRef,
+      p_destination_id: destination.id,
+      p_payment_method: destination.type === 'telebirr' ? 'telebirr' : 'bank',
+      p_sender_reference: senderReference,
+      p_external_reference: externalReference,
+      p_note: note,
+      p_idempotency_key: idempotencyKey
+    });
+    if (rpcErr) {
+      if (/duplicate/i.test(rpcErr.message || '')) {
+        return res.status(409).json({ error: 'This transaction reference has already been submitted' });
+      }
+      console.warn('Manual deposit could not be recorded:', rpcErr.code || 'rpc_error');
+      return res.status(500).json({ error: 'Could not record the deposit request. Please try again.' });
+    }
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row) return res.status(500).json({ error: 'Could not record the deposit request. Please try again.' });
+
+    if (row.replayed) {
+      return res.status(200).json({
+        ok: true,
+        depositId: row.deposit_id,
+        tx_ref: row.tx_ref,
+        status: 'pending',
+        replayed: true,
+        message: 'Proof submitted for review'
       });
     }
-    if (!PAYMENT_METHODS.includes(payment_method)) {
-      return res.status(400).json({ error: 'Invalid payment method' });
+
+    const proofPath = manualProofPath(req.user.id, row.deposit_id, req.file.mimetype);
+    const { error: upErr } = await supabase.storage.from(MANUAL_PROOF_BUCKET).upload(proofPath, req.file.buffer, {
+      contentType: req.file.mimetype,
+      upsert: false
+    });
+    if (upErr) {
+      // Never leave a reviewable request without its proof.
+      await supabase.from('deposits').update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', row.deposit_id).eq('status', 'pending');
+      return res.status(502).json({ error: 'Proof upload failed. Please try again.' });
     }
 
-    let screenshotUrl = null;
-    let screenshotPath = null;
-    if (req.file) {
-      const ext = mimeToExtension(req.file.mimetype);
-      const filePath = `deposits/${Date.now()}-${randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from(SUPABASE_BUCKET).upload(filePath, req.file.buffer, {
-        contentType: req.file.mimetype, upsert: false
-      });
-      if (upErr) return res.status(502).json({ error: 'Screenshot upload failed' });
-      const { data: urlData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filePath);
-      screenshotUrl = urlData?.publicUrl || null;
-      screenshotPath = filePath;
+    const { error: attachErr } = await supabase
+      .from('deposits')
+      .update({ proof_path: proofPath, proof_mime: req.file.mimetype, updated_at: new Date().toISOString() })
+      .eq('id', row.deposit_id);
+    if (attachErr) {
+      await supabase.storage.from(MANUAL_PROOF_BUCKET).remove([proofPath]);
+      await supabase.from('deposits').update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', row.deposit_id).eq('status', 'pending');
+      return res.status(500).json({ error: 'Could not attach the proof. Please try again.' });
     }
 
-    const tx_ref = `LB-MAN-${req.user.id.slice(0, 8)}-${Date.now()}`;
-    const { data: dep, error: insErr } = await supabase.from('deposits').insert({
-      user_id: req.user.id,
-      amount: amountNum,
-      tx_ref,
-      payment_method,
-      screenshot_url: screenshotUrl,
-      screenshot_path: screenshotPath,
-      status: 'pending'
-    }).select('id').single();
-
-    if (insErr) return res.status(500).json({ error: 'Failed to record deposit request' });
-
+    // Identifiers only – no proof URL, no full sender account number.
     await notifyAdmin(
-      `💳 Manual Deposit Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}\nRef: ${tx_ref}`,
-      screenshotUrl
+      `🧾 Manual deposit proof submitted\n` +
+      `Deposit: ${row.deposit_id}\nUser: ${req.user.id}\nAmount: ${amount} ETB\n` +
+      `Destination: ${destination.bank_name}\nSender: ${paymentDestinations.maskAccount(senderReference)}\n` +
+      `Review it in the admin panel before crediting.`,
+      null
     );
 
-    return res.status(201).json({ ok: true, depositId: dep.id, message: 'Deposit request received. Admin will confirm shortly.' });
+    return res.status(201).json({
+      ok: true,
+      depositId: row.deposit_id,
+      tx_ref: row.tx_ref,
+      status: 'pending',
+      message: 'Proof submitted for review'
+    });
   } catch (err) {
     return next(err);
   }
 });
 
-// ===== ADMIN – APPROVE MANUAL DEPOSIT =====
-app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req, res, next) => {
+// ===== DEPOSIT – MANUAL HISTORY (player, own records only) =====
+app.get('/api/deposits/manual', verifyJWT, async (req, res, next) => {
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { id } = req.params;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    const { data, error, count } = await supabase
+      .from('deposits')
+      .select('id, amount, status, destination_id, external_reference, note, review_reason, created_at, updated_at, reviewed_at', { count: 'exact' })
+      .eq('user_id', req.user.id)
+      .not('destination_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) return res.status(500).json({ error: 'Failed to fetch deposits' });
+    return res.json({ ok: true, deposits: (data || []).map(publicDepositView), total: count || 0, page });
+  } catch (err) {
+    return next(err);
+  }
+});
 
-    const { data: dep } = await supabase.from('deposits').select('tx_ref, status').eq('id', id).maybeSingle();
-    if (!dep) return res.status(404).json({ error: 'Deposit not found' });
-    if (dep.status !== 'pending') return res.status(400).json({ error: 'Deposit already processed' });
+// Internal statuses stay compatible with the existing rows; the API speaks the
+// player-facing vocabulary.
+function publicDepositStatus(status) {
+  if (status === 'completed') return 'approved';
+  if (status === 'failed') return 'rejected';
+  return status;
+}
 
-    // Credit through the same single-shot transaction used by the webhook so
-    // an approval can never double-credit, even if clicked twice.
-    const { data: rows, error } = await supabase.rpc('complete_deposit', { p_tx_ref: dep.tx_ref });
-    if (error) return res.status(500).json({ error: 'Deposit could not be credited' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.credited) return res.status(400).json({ error: 'Deposit already processed' });
+function publicDepositView(row) {
+  return { ...row, status: publicDepositStatus(row.status) };
+}
 
-    return res.json({ ok: true, message: 'Deposit approved and balance credited' });
+// ===== DEPOSIT – PROOF ACCESS =====
+// Proof objects live in a private bucket. Only the owner or an admin can obtain
+// a short-lived signed URL, so proofs are never publicly enumerable.
+app.get('/api/deposits/:id/proof', verifyJWT, walletRateLimit, async (req, res, next) => {
+  try {
+    const id = String(req.params.id || '');
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(400).json({ error: 'Invalid deposit id' });
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const { data: dep } = await supabase
+      .from('deposits')
+      .select('id, user_id, proof_path')
+      .eq('id', id)
+      .maybeSingle();
+
+    const isAdmin = ADMIN_EMAILS.includes((req.user.email || '').toLowerCase());
+    if (!dep || (!isAdmin && dep.user_id !== req.user.id)) {
+      return res.status(404).json({ error: 'Proof not found' });
+    }
+    if (!dep.proof_path) return res.status(404).json({ error: 'Proof not found' });
+
+    const { data: signed, error } = await supabase.storage
+      .from(MANUAL_PROOF_BUCKET)
+      .createSignedUrl(dep.proof_path, PROOF_SIGNED_URL_TTL_SECONDS);
+    if (error || !signed?.signedUrl) return res.status(502).json({ error: 'Proof is temporarily unavailable' });
+
+    return res.json({ ok: true, url: signed.signedUrl, expires_in: PROOF_SIGNED_URL_TTL_SECONDS });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ===== ADMIN – MANUAL DEPOSIT REVIEW QUEUE =====
+app.get('/api/admin/deposits', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    const statusFilter = String(req.query.status || 'pending');
+    const allowed = ['pending', 'approved', 'rejected', 'cancelled', 'all'];
+    if (!allowed.includes(statusFilter)) return res.status(400).json({ error: 'Invalid status filter' });
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    let query = supabase
+      .from('deposits')
+      .select(
+        'id, user_id, amount, tx_ref, status, destination_id, payment_method, sender_reference, external_reference, note, proof_path, review_reason, reviewed_by, reviewed_at, created_at, updated_at, users(email, full_name, phone)',
+        { count: 'exact' }
+      )
+      .not('destination_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (statusFilter === 'approved') query = query.eq('status', 'completed');
+    else if (statusFilter === 'rejected') query = query.eq('status', 'failed');
+    else if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+
+    const { data, error, count } = await query;
+    if (error) return res.status(500).json({ error: 'Failed to fetch deposits' });
+
+    const deposits = (data || []).map((row) => {
+      const { proof_path, ...rest } = row;
+      return { ...publicDepositView(rest), has_proof: Boolean(proof_path) };
+    });
+    return res.json({ ok: true, deposits, total: count || 0, page });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/** Shared approve/reject handler – the state change and the credit both happen
+ * inside one database transaction that only ever fires once per deposit. */
+async function reviewManualDeposit(req, res, action) {
+  const id = String(req.params.id || '');
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(400).json({ error: 'Invalid deposit id' });
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : null;
+
+  const { data: rows, error } = await supabase.rpc('review_manual_deposit', {
+    p_deposit_id: id,
+    p_action: action,
+    p_reviewer: (req.user.email || req.user.id || '').slice(0, 120),
+    p_reason: reason || null
+  });
+  if (error) {
+    if (/not found/i.test(error.message || '')) return res.status(404).json({ error: 'Deposit not found' });
+    console.warn('Manual deposit review failed:', error.code || 'rpc_error');
+    return res.status(500).json({ error: 'Deposit could not be reviewed' });
+  }
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row || !row.reviewed) return res.status(409).json({ error: 'Deposit already processed' });
+
+  return res.json({
+    ok: true,
+    credited: Boolean(row.credited),
+    message: action === 'approve' ? 'Deposit approved and balance credited' : 'Deposit rejected'
+  });
+}
+
+app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    return await reviewManualDeposit(req, res, 'approve');
   } catch (err) {
     return next(err);
   }
@@ -908,16 +1172,7 @@ app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req,
 
 app.post('/api/admin/deposits/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
   try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data, error } = await supabase
-      .from('deposits')
-      .update({ status: 'failed' })
-      .eq('id', req.params.id)
-      .eq('status', 'pending')
-      .select('id');
-    if (error) return res.status(500).json({ error: 'Deposit could not be rejected' });
-    if (!data || data.length === 0) return res.status(400).json({ error: 'Deposit already processed' });
-    return res.json({ ok: true, message: 'Deposit rejected' });
+    return await reviewManualDeposit(req, res, 'reject');
   } catch (err) {
     return next(err);
   }
@@ -927,37 +1182,90 @@ app.post('/api/admin/deposits/:id/reject', verifyJWT, requireAdmin, async (req, 
 // The funds check, the reservation (debit) and the request record all happen
 // inside `request_withdrawal`, a single locking transaction, so concurrent
 // requests can not over-withdraw the same balance.
+const WITHDRAWAL_DESTINATION_TYPES = ['telebirr', 'bank'];
+const BANK_ACCOUNT_PATTERN = /^[0-9][0-9 -]{5,31}$/;
+
+/**
+ * Validates a withdrawal payload. Ethiopian mobile formatting is enforced for
+ * Telebirr payouts and every field length is bounded, so nothing unbounded or
+ * unparsable ever reaches the ledger.
+ */
+function validateWithdrawalPayload(body) {
+  const amountNum = Number(body.amount);
+  if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.withdrawMin || amountNum > WALLET_LIMITS.withdrawMax) {
+    return { error: `Withdrawal must be between ${WALLET_LIMITS.withdrawMin} and ${WALLET_LIMITS.withdrawMax} ETB` };
+  }
+
+  // `payment_method` is the legacy field name; both spellings are accepted.
+  const rawType = String(body.destination_type || body.payment_method || '').trim().toLowerCase();
+  let destinationType = rawType;
+  let bankName = typeof body.bank_name === 'string' ? body.bank_name.trim().slice(0, 60) : '';
+  if (!WITHDRAWAL_DESTINATION_TYPES.includes(rawType)) {
+    if (!PAYMENT_METHODS.includes(rawType)) {
+      return { error: 'Choose Telebirr or a bank transfer' };
+    }
+    destinationType = 'bank';
+    bankName = bankName || rawType.toUpperCase();
+  }
+
+  const destinationId = String(body.destination_id || '').trim().toLowerCase();
+  if (destinationId) {
+    const configured = MANUAL_DESTINATION_BY_ID.get(destinationId);
+    if (!configured) return { error: 'Choose one of the listed payment destinations' };
+    bankName = configured.bank_name;
+  }
+
+  if (destinationType === 'bank' && (bankName.length < 2 || bankName.length > 60)) {
+    return { error: 'Enter the bank name' };
+  }
+
+  const accountNumber = typeof body.account_number === 'string' ? body.account_number.trim() : '';
+  if (destinationType === 'telebirr') {
+    if (!paymentDestinations.isEthiopianPhone(accountNumber)) {
+      return { error: 'Enter a valid Ethiopian Telebirr number, e.g. 0912345678' };
+    }
+  } else if (!BANK_ACCOUNT_PATTERN.test(accountNumber)) {
+    return { error: 'Enter a valid bank account number' };
+  }
+
+  const accountName = typeof body.account_name === 'string' ? body.account_name.trim() : '';
+  if (accountName.length < 2 || accountName.length > 80) {
+    return { error: 'Enter the account holder name' };
+  }
+
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 300) : '';
+
+  return {
+    value: {
+      amount: Math.round(amountNum * 100) / 100,
+      destinationType,
+      bankName: destinationType === 'bank' ? bankName : 'Telebirr',
+      accountNumber,
+      accountName,
+      note: note || null
+    }
+  };
+}
+
 app.post('/api/withdrawals', verifyJWT, walletRateLimit, async (req, res, next) => {
   try {
     // Payload validation runs before any I/O so malformed requests are cheap
     // to reject and always answered with the same message.
-    const { amount, payment_method, account_number, account_name } = req.body || {};
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.withdrawMin || amountNum > WALLET_LIMITS.withdrawMax) {
-      return res.status(400).json({
-        error: `Withdrawal must be between ${WALLET_LIMITS.withdrawMin} and ${WALLET_LIMITS.withdrawMax} ETB`
-      });
-    }
-    if (!PAYMENT_METHODS.includes(payment_method)) {
-      return res.status(400).json({ error: 'Invalid payment method' });
-    }
-    const accountNumber = typeof account_number === 'string' ? account_number.trim() : '';
-    const accountName = typeof account_name === 'string' ? account_name.trim() : '';
-    if (!/^[0-9+\- ]{6,32}$/.test(accountNumber)) {
-      return res.status(400).json({ error: 'Enter a valid account or phone number' });
-    }
-    if (accountName.length < 2 || accountName.length > 80) {
-      return res.status(400).json({ error: 'Enter the account holder name' });
-    }
+    const parsed = validateWithdrawalPayload(req.body || {});
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { amount, destinationType, bankName, accountNumber, accountName, note } = parsed.value;
+
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
     const idempotencyKey = requestIdempotencyKey(req) || randomUUID();
     const { data: rows, error: rpcErr } = await supabase.rpc('request_withdrawal', {
       p_user_id: req.user.id,
-      p_amount: amountNum,
-      p_payment_method: payment_method,
+      p_amount: amount,
+      p_payment_method: destinationType,
       p_account_number: accountNumber,
       p_account_name: accountName,
+      p_bank_name: bankName,
+      p_note: note,
       p_idempotency_key: idempotencyKey
     });
     if (rpcErr) {
@@ -968,8 +1276,11 @@ app.post('/api/withdrawals', verifyJWT, walletRateLimit, async (req, res, next) 
     if (!row) return res.status(500).json({ error: 'Withdrawal could not be created' });
 
     if (!row.replayed) {
+      // Identifiers only – the payout account is never sent in full over Telegram.
       await notifyAdmin(
-        `💸 Withdrawal Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}`,
+        `💸 Withdrawal request\nWithdrawal: ${row.withdrawal_id}\nUser: ${req.user.id}\n` +
+        `Amount: ${amount} ETB\nDestination: ${bankName}\n` +
+        `Account: ${paymentDestinations.maskAccount(accountNumber)}\nReview it in the admin panel.`,
         null
       );
     }
@@ -980,7 +1291,7 @@ app.post('/api/withdrawals', verifyJWT, walletRateLimit, async (req, res, next) 
       balance: gameMath.fromCents(row.balance_after_cents),
       replayed: Boolean(row.replayed),
       status: 'pending',
-      message: 'Withdrawal request submitted. It will be reviewed within 24h.'
+      message: 'Withdrawal request submitted. Funds are reserved until an operator reviews it.'
     });
   } catch (err) {
     return next(err);
@@ -991,14 +1302,18 @@ app.post('/api/withdrawals', verifyJWT, walletRateLimit, async (req, res, next) 
 app.get('/api/withdrawals', verifyJWT, async (req, res, next) => {
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data, error } = await supabase
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    // Scoped to the caller: a player can only ever see their own requests.
+    const { data, error, count } = await supabase
       .from('withdrawals')
-      .select('id, amount, payment_method, status, created_at')
+      .select('id, amount, payment_method, bank_name, status, admin_notes, payment_reference, created_at, updated_at, reviewed_at', { count: 'exact' })
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .range(offset, offset + limit - 1);
     if (error) return res.status(500).json({ error: 'Failed to fetch withdrawals' });
-    return res.json({ ok: true, withdrawals: data || [] });
+    return res.json({ ok: true, withdrawals: data || [], total: count || 0, page });
   } catch (err) {
     return next(err);
   }
@@ -1013,11 +1328,13 @@ app.post('/api/withdrawals/:id/cancel', verifyJWT, walletRateLimit, async (req, 
       p_withdrawal_id: req.params.id,
       p_status: 'cancelled',
       p_user_id: req.user.id,
-      p_admin_notes: 'Cancelled by player'
+      p_admin_notes: 'Cancelled by player',
+      p_reviewer: null,
+      p_payment_reference: null
     });
     if (error) return res.status(404).json({ error: 'Withdrawal not found' });
     const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Withdrawal already processed' });
+    if (!row || !row.resolved) return res.status(409).json({ error: 'Withdrawal already processed' });
     return res.json({ ok: true, message: 'Withdrawal cancelled and funds returned' });
   } catch (err) {
     return next(err);
@@ -1025,19 +1342,88 @@ app.post('/api/withdrawals/:id/cancel', verifyJWT, walletRateLimit, async (req, 
 });
 
 // ===== ADMIN – PROCESS WITHDRAWAL =====
+app.get('/api/admin/withdrawals', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    const statusFilter = String(req.query.status || 'pending');
+    const allowed = ['pending', 'processing', 'paid', 'rejected', 'cancelled', 'all'];
+    if (!allowed.includes(statusFilter)) return res.status(400).json({ error: 'Invalid status filter' });
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    let query = supabase
+      .from('withdrawals')
+      .select('id, user_id, amount, payment_method, bank_name, account_number, account_name, note, status, admin_notes, payment_reference, reviewed_by, reviewed_at, created_at, updated_at, users(email, full_name, phone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+
+    const { data, error, count } = await query;
+    if (error) return res.status(500).json({ error: 'Failed to fetch withdrawals' });
+    return res.json({ ok: true, withdrawals: data || [], total: count || 0, page });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Shared admin transition handler. `resolve_withdrawal` validates the source
+ * state, so replays, refreshes and two admins clicking at once resolve the
+ * request exactly once: the losing call gets `resolved = false`.
+ */
+async function resolveWithdrawalAs(req, res, status) {
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  const paymentReference = typeof req.body?.payment_reference === 'string'
+    ? req.body.payment_reference.trim().slice(0, 120)
+    : null;
+  if (status === 'paid' && paymentReference && !/^[A-Za-z0-9\-_.]{3,120}$/.test(paymentReference)) {
+    return res.status(400).json({ error: 'The payment reference contains unsupported characters' });
+  }
+
+  const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
+    p_withdrawal_id: req.params.id,
+    p_status: status,
+    p_user_id: null,
+    p_admin_notes: typeof req.body?.notes === 'string' ? req.body.notes.trim().slice(0, 500)
+      : (typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : null),
+    p_reviewer: (req.user.email || req.user.id || '').slice(0, 120),
+    p_payment_reference: paymentReference
+  });
+  if (error) {
+    if (/invalid status|transition/i.test(error.message || '')) {
+      return res.status(409).json({ error: 'Invalid withdrawal state transition' });
+    }
+    return res.status(404).json({ error: 'Withdrawal not found' });
+  }
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row || !row.resolved) return res.status(409).json({ error: 'Already processed' });
+  return res.json({ ok: true, refunded: Boolean(row.refunded), status, message: `Withdrawal marked as ${status}` });
+}
+
+app.post('/api/admin/withdrawals/:id/processing', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    return await resolveWithdrawalAs(req, res, 'processing');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Marking a request paid never debits again – the amount was already reserved
+// when the player created it.
+app.post('/api/admin/withdrawals/:id/paid', verifyJWT, requireAdmin, async (req, res, next) => {
+  try {
+    return await resolveWithdrawalAs(req, res, 'paid');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Legacy alias kept so existing admin tooling keeps working.
 app.post('/api/admin/withdrawals/:id/complete', verifyJWT, requireAdmin, async (req, res, next) => {
   try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
-      p_withdrawal_id: req.params.id,
-      p_status: 'completed',
-      p_user_id: null,
-      p_admin_notes: typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 500) : null
-    });
-    if (error) return res.status(404).json({ error: 'Withdrawal not found' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Already processed' });
-    return res.json({ ok: true, message: 'Withdrawal marked as completed' });
+    return await resolveWithdrawalAs(req, res, 'paid');
   } catch (err) {
     return next(err);
   }
@@ -1045,17 +1431,7 @@ app.post('/api/admin/withdrawals/:id/complete', verifyJWT, requireAdmin, async (
 
 app.post('/api/admin/withdrawals/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
   try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
-      p_withdrawal_id: req.params.id,
-      p_status: 'rejected',
-      p_user_id: null,
-      p_admin_notes: typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 500) : null
-    });
-    if (error) return res.status(404).json({ error: 'Withdrawal not found' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Already processed' });
-    return res.json({ ok: true, message: 'Withdrawal rejected and balance refunded' });
+    return await resolveWithdrawalAs(req, res, 'rejected');
   } catch (err) {
     return next(err);
   }
@@ -1617,7 +1993,7 @@ app.get('/api/wallet/summary', verifyJWT, async (req, res, next) => {
 
     const [userRes, pendingWdRes, pendingDepRes] = await Promise.all([
       supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle(),
-      supabase.from('withdrawals').select('amount').eq('user_id', req.user.id).eq('status', 'pending'),
+      supabase.from('withdrawals').select('amount').eq('user_id', req.user.id).in('status', ['pending', 'processing']),
       supabase.from('deposits').select('amount').eq('user_id', req.user.id).eq('status', 'pending')
     ]);
 

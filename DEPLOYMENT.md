@@ -35,7 +35,17 @@ The supported deployment target is **Render** (Node web service). The repository
      `fast_keno`, adds the `cancelled` status to deposits and withdrawals, and
      adds `withdrawals.idempotency_key` with a partial unique index. The block
      is written to be safe to re-run and does not touch existing rows.
-   - Creates the `screenshots` storage bucket (idempotent `ON CONFLICT DO NOTHING`).
+   - Runs the `MANUAL DEPOSIT / WITHDRAWAL WORKFLOW` migration block, which adds
+     the manual-deposit columns (destination, sender reference, external
+     reference, proof path, reviewer, review notes, idempotency key), the unique
+     indexes that stop duplicate references, and the
+     `create_manual_deposit()` / `review_manual_deposit()` functions plus the
+     widened `request_withdrawal()` / `resolve_withdrawal()` functions. The block
+     is written to be safe to re-run and does not touch existing rows.
+   - Creates the `screenshots` storage bucket and the **private**
+     `deposit-proofs` bucket used for deposit proof screenshots (idempotent
+     `ON CONFLICT DO NOTHING`). Keep `deposit-proofs` non-public: proofs are only
+     ever served through short-lived signed URLs to the owner or an admin.
 3. Copy your project credentials from **Settings → API**:
    - **Project URL** → `SUPABASE_URL`
    - **`service_role` secret key** → `SUPABASE_SERVICE_ROLE_KEY` (keep this server-side only)
@@ -122,8 +132,13 @@ curl -X POST https://lucky-birr.onrender.com/api/auth/login \
 | `TELEGRAM_BOT_TOKEN` | No | — | Telegram bot token – enables outbound admin notifications |
 | `ADMIN_CHAT_ID` | No | — | Telegram chat/user ID for notifications |
 | `TELEGRAM_WEBHOOK_SECRET` | No | — | Secret path segment – enables inbound webhook endpoint |
-| `CHAPA_SECRET_KEY` | Payments | — | Chapa secret key. Use a `CHASECK_TEST-` key outside production |
-| `CHAPA_WEBHOOK_SECRET` | Payments | — | Shared secret used to verify the Chapa callback signature |
+| `TELEBIRR_NUMBER` | No | `0936719379` | Telebirr destination shown to players |
+| `TELEBIRR_ACCOUNT_HOLDER` | No | `Lucky Birr` | Name displayed next to the Telebirr number |
+| `MANUAL_PAYMENT_ACCOUNTS_JSON` | No | — | JSON array of extra (bank) destinations, validated at startup |
+| `MANUAL_PROOF_BUCKET` | No | `deposit-proofs` | **Private** Supabase Storage bucket for proof screenshots |
+| `CHAPA_ENABLED` | No | `false` | `true` re-enables the legacy automatic Chapa gateway |
+| `CHAPA_SECRET_KEY` | Chapa only | — | Chapa secret key. Use a `CHASECK_TEST-` key outside production |
+| `CHAPA_WEBHOOK_SECRET` | Chapa only | — | Shared secret used to verify the Chapa callback signature |
 | `DEPOSIT_MIN_ETB` | No | `10` | Minimum deposit in ETB, enforced server-side |
 | `DEPOSIT_MAX_ETB` | No | `50000` | Maximum deposit in ETB, enforced server-side |
 | `WITHDRAW_MIN_ETB` | No | `50` | Minimum withdrawal in ETB, enforced server-side |
@@ -132,7 +147,18 @@ curl -X POST https://lucky-birr.onrender.com/api/auth/login \
 | `FAST_KENO_DRAWING_MS` | No | `6000` | Fast Keno drawing phase in ms |
 | `FAST_KENO_RESULT_MS` | No | `6000` | Fast Keno result phase in ms |
 
-> **Chapa callback URL:** register `<WEBSITE_URL>/api/deposits/callback`
+> **Money movement is manual by default.** Players transfer money themselves to
+> the configured destinations (Telebirr `0936719379` plus whatever you put in
+> `MANUAL_PAYMENT_ACCOUNTS_JSON`), upload a screenshot, and an admin approves or
+> rejects the request from the admin panel's **Manual Money Requests** queue.
+> Submitting proof never credits a wallet and never guarantees approval;
+> withdrawals reserve the funds when requested and are refunded exactly once if
+> rejected or cancelled. Configure destinations only through the server
+> environment — the example values in `.env.example` are obvious placeholders,
+> replace them with your real accounts before going live.
+
+> **Chapa (optional, off by default):** set `CHAPA_ENABLED=true` plus
+> `CHAPA_SECRET_KEY` to re-enable it, then register `<WEBSITE_URL>/api/deposits/callback`
 > in the Chapa dashboard and set `CHAPA_WEBHOOK_SECRET` to the same secret.
 > Deposits are only credited after the server re-verifies the transaction with
 > Chapa, so a missed webhook is recovered by the status endpoint the app calls
@@ -240,7 +266,11 @@ If you are running without Telegram (admin panel only):
 
 ## Production Deployment Checklist
 
-- [ ] Supabase tables and storage bucket created (run `supabase.sql` in the Supabase SQL Editor)
+- [ ] Supabase tables and storage buckets created (run `supabase.sql` in the Supabase SQL Editor)
+- [ ] `deposit-proofs` bucket exists and is **not public**
+- [ ] `MANUAL_PAYMENT_ACCOUNTS_JSON` replaced with real accounts (placeholders removed)
+- [ ] Withdrawal limits (`WITHDRAW_MIN_ETB` / `WITHDRAW_MAX_ETB`) reviewed
+- [ ] An admin can see and action the manual deposit/withdrawal queue
 - [ ] Render Blueprint deployed (`render.yaml`)
 - [ ] `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in Render dashboard
 - [ ] `JWT_SECRET` auto-generated by Render (verify it is set)

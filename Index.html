@@ -1008,6 +1008,15 @@
                 <button class="btn-draw" onclick="showTab('draw')">🎲 Draw</button>
                 <button class="btn-reset" onclick="resetDraw()">🔄 Reset</button>
             </div>
+
+            <!-- MANUAL MONEY REVIEW QUEUE (admin only; every action is re-checked server-side) -->
+            <div class="admin-panel-title" style="margin-top:14px;">💵 Manual Money Requests</div>
+            <div class="bet-quick-row" id="adminQueueFilters" role="group" aria-label="Filter money requests">
+                <button class="bet-quick active" data-queue="deposits" onclick="setAdminQueue('deposits')">Deposits</button>
+                <button class="bet-quick" data-queue="withdrawals" onclick="setAdminQueue('withdrawals')">Withdrawals</button>
+                <button class="bet-quick" onclick="loadAdminQueue()">↻ Refresh</button>
+            </div>
+            <div id="adminQueueList"><div class="tx-empty">Open the panel to load pending requests</div></div>
         </div>
 
         <!-- HOME SCREEN -->
@@ -2547,7 +2556,7 @@
             btn.classList.toggle('active');
             panel.classList.toggle('active');
             btn.textContent = panel.classList.contains('active') ? '🔒 Admin' : '👤 Admin';
-            if (panel.classList.contains('active')) updateAdminPanel();
+            if (panel.classList.contains('active')) { updateAdminPanel(); loadAdminQueue(); }
         }
 
         function copyText(text, el) {
@@ -4240,6 +4249,160 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💸 Request Withdrawal';
+            }
+        }
+
+        // ===== ADMIN – MANUAL MONEY REVIEW =====
+        // Every button here calls an authenticated admin endpoint; the server
+        // re-checks the role, the state machine and the one-time credit, so the
+        // UI can never approve twice by double-clicking or refreshing.
+        let adminQueue = 'deposits';
+
+        function setAdminQueue(queue) {
+            adminQueue = queue === 'withdrawals' ? 'withdrawals' : 'deposits';
+            document.querySelectorAll('#adminQueueFilters .bet-quick').forEach(b => {
+                if (b.dataset.queue) b.classList.toggle('active', b.dataset.queue === adminQueue);
+            });
+            loadAdminQueue();
+        }
+
+        function adminQueueRow(row) {
+            const el = document.createElement('div');
+            el.className = 'tx-item';
+            const info = document.createElement('div');
+            info.className = 'tx-info';
+            const desc = document.createElement('div');
+            desc.className = 'tx-desc';
+            const who = (row.users && (row.users.email || row.users.full_name)) || row.user_id;
+            desc.textContent = row.amount + ' ETB · ' + who;
+            const meta = document.createElement('div');
+            meta.className = 'tx-date';
+            meta.textContent = adminQueue === 'deposits'
+                ? [row.destination_id, row.external_reference, row.note].filter(Boolean).join(' · ')
+                : [row.bank_name || row.payment_method, row.account_name, row.note].filter(Boolean).join(' · ');
+            const when = document.createElement('div');
+            when.className = 'tx-date';
+            when.textContent = new Date(row.created_at).toLocaleString('en-ET');
+            info.appendChild(desc);
+            info.appendChild(meta);
+            info.appendChild(when);
+            el.appendChild(info);
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+
+            if (adminQueue === 'deposits') {
+                if (row.has_proof) {
+                    const proof = document.createElement('button');
+                    proof.className = 'mir-copy';
+                    proof.type = 'button';
+                    proof.textContent = 'Proof';
+                    proof.addEventListener('click', function () { openProof(row.id, proof); });
+                    actions.appendChild(proof);
+                }
+                actions.appendChild(adminActionButton('Approve', function (btn) {
+                    return adminPost('/api/admin/deposits/' + encodeURIComponent(row.id) + '/approve', {}, btn);
+                }));
+                actions.appendChild(adminActionButton('Reject', function (btn) {
+                    const reason = window.prompt('Reason for rejection (optional)') || '';
+                    return adminPost('/api/admin/deposits/' + encodeURIComponent(row.id) + '/reject', { reason }, btn);
+                }));
+            } else {
+                actions.appendChild(adminActionButton('Mark paid', function (btn) {
+                    const payment_reference = window.prompt('External payment reference (optional)') || '';
+                    return adminPost('/api/admin/withdrawals/' + encodeURIComponent(row.id) + '/paid', { payment_reference }, btn);
+                }));
+                actions.appendChild(adminActionButton('Reject', function (btn) {
+                    const reason = window.prompt('Reason for rejection (optional)') || '';
+                    return adminPost('/api/admin/withdrawals/' + encodeURIComponent(row.id) + '/reject', { reason }, btn);
+                }));
+            }
+
+            el.appendChild(actions);
+            return el;
+        }
+
+        function adminActionButton(label, handler) {
+            const btn = document.createElement('button');
+            btn.className = 'mir-copy';
+            btn.type = 'button';
+            btn.textContent = label;
+            btn.addEventListener('click', async function () {
+                if (btn.disabled) return;
+                btn.disabled = true;
+                try {
+                    await handler(btn);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+            return btn;
+        }
+
+        async function adminPost(path, body, btn) {
+            if (!AUTH_TOKEN) { showToast('Please sign in'); return; }
+            try {
+                const resp = await fetch(path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify(body || {})
+                });
+                const data = await readJsonResponse(resp, 'Admin action');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ ' + (data.message || 'Done'));
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Action failed'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.blur();
+                await loadAdminQueue();
+            }
+        }
+
+        async function openProof(depositId, btn) {
+            if (btn) btn.disabled = true;
+            try {
+                const resp = await fetch('/api/deposits/' + encodeURIComponent(depositId) + '/proof', {
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Proof');
+                if (resp.ok && data && data.ok && data.url) {
+                    window.open(data.url, '_blank', 'noopener');
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Proof unavailable'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function loadAdminQueue() {
+            const list = document.getElementById('adminQueueList');
+            if (!list || !isAdmin || !AUTH_TOKEN) return;
+            list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            try {
+                const endpoint = adminQueue === 'withdrawals' ? '/api/admin/withdrawals' : '/api/admin/deposits';
+                const resp = await fetch(endpoint + '?status=pending&limit=20', {
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Admin queue');
+                if (!resp.ok || !data || !data.ok) {
+                    list.innerHTML = '<div class="tx-empty">Failed to load requests</div>';
+                    return;
+                }
+                const rows = (adminQueue === 'withdrawals' ? data.withdrawals : data.deposits) || [];
+                list.innerHTML = '';
+                if (rows.length === 0) {
+                    list.innerHTML = '<div class="tx-empty">Nothing waiting for review</div>';
+                    return;
+                }
+                rows.forEach(row => list.appendChild(adminQueueRow(row)));
+            } catch (_e) {
+                list.innerHTML = '<div class="tx-empty">Error loading requests</div>';
             }
         }
 

@@ -32,15 +32,22 @@ See [`.env.example`](.env.example) for full documentation. Key required variable
 | `TELEGRAM_BOT_TOKEN` | Optional | Enables outbound admin notifications |
 | `ADMIN_CHAT_ID` | Optional | Telegram chat ID for notifications |
 | `TELEGRAM_WEBHOOK_SECRET` | Optional | Enables inbound webhook endpoint |
-| `CHAPA_SECRET_KEY` | Payments | Chapa secret key (use a `CHASECK_TEST-` key outside production) |
-| `CHAPA_WEBHOOK_SECRET` | Payments | Verifies the Chapa callback signature |
+| `TELEBIRR_NUMBER` | Optional | Telebirr destination shown to players (default `0936719379`) |
+| `TELEBIRR_ACCOUNT_HOLDER` | Optional | Name displayed next to the Telebirr number |
+| `MANUAL_PAYMENT_ACCOUNTS_JSON` | Optional | JSON array of extra (bank) destinations, validated at startup |
+| `MANUAL_PROOF_BUCKET` | Optional | **Private** Supabase Storage bucket for proof screenshots (default `deposit-proofs`) |
+| `CHAPA_ENABLED` | Optional | `true` turns the legacy automatic gateway back on (default off) |
+| `CHAPA_SECRET_KEY` | Chapa only | Chapa secret key (use a `CHASECK_TEST-` key outside production) |
+| `CHAPA_WEBHOOK_SECRET` | Chapa only | Verifies the Chapa callback signature |
 | `DEPOSIT_MIN_ETB` / `DEPOSIT_MAX_ETB` | Optional | Deposit limits in ETB (default `10` / `50000`) |
 | `WITHDRAW_MIN_ETB` / `WITHDRAW_MAX_ETB` | Optional | Withdrawal limits in ETB (default `50` / `25000`) |
 | `FAST_KENO_BETTING_MS` | Optional | Fast Keno betting window (default `20000`) |
 | `FAST_KENO_DRAWING_MS` | Optional | Fast Keno drawing phase (default `6000`) |
 | `FAST_KENO_RESULT_MS` | Optional | Fast Keno result phase (default `6000`) |
 
-The Chapa callback URL to register in the dashboard is
+The Chapa gateway is **disabled by default**; it only comes back to life when
+`CHAPA_ENABLED=true` *and* `CHAPA_SECRET_KEY` are both set. When it is enabled,
+the callback URL to register in the dashboard is
 `<WEBSITE_URL>/api/deposits/callback`.
 
 ## Supabase Setup
@@ -167,51 +174,115 @@ round index = floor(server_time / (FAST_KENO_BETTING_MS + FAST_KENO_DRAWING_MS +
 - All money math inside the settlement path uses integer minor units
   (cents), avoiding floating-point drift.
 
-### Wallet, deposits, and withdrawals
+### Wallet: manual deposits and withdrawals
+
+Money moves **manually** and is always reviewed by an operator. Players transfer
+the money themselves to one of the configured destinations, upload a screenshot
+as proof, and an admin approves or rejects the request. **Uploading proof never
+credits a wallet and does not guarantee approval.**
 
 Every balance mutation goes through a Postgres function that locks the user
 row, so the browser can never decide an amount, a payment status, or a
 resulting balance.
 
+#### Payment destinations
+
+Destinations live **only on the server**, in `MANUAL_PAYMENT_ACCOUNTS_JSON`, and
+are parsed and validated at startup by `lib/paymentDestinations.js`. Invalid
+configuration is logged as a warning and falls back to the Telebirr destination
+alone — it never guesses bank details and never stops the deployment.
+
+```jsonc
+// MANUAL_PAYMENT_ACCOUNTS_JSON – placeholders only, replace with your accounts
+[
+  {
+    "id": "cbe",
+    "type": "bank",                       // "bank" or "telebirr"
+    "bank_name": "Example Bank",
+    "account_holder": "EXAMPLE ACCOUNT HOLDER",
+    "account_number": "0000000000000",    // placeholder, not a real account
+    "instructions": "Optional extra note" // optional
+  }
+]
+```
+
+The operator's Telebirr number `0936719379` is always offered (override it with
+`TELEBIRR_NUMBER`). The client learns about destinations only through the
+authenticated, read-only `GET /api/payment/destinations` endpoint; nothing is
+hard-coded in `Index.html`.
+
+#### Proof storage
+
+Proof screenshots go into the **private** bucket named by `MANUAL_PROOF_BUCKET`
+(default `deposit-proofs`, created by `supabase.sql`). Filenames are generated
+server-side as `manual-deposits/<user-id>/<deposit-id>.<ext>`, so no request
+value ever reaches a storage path. Only JPEG/PNG/WebP up to 6 MB are accepted,
+and the file is readable exclusively through a 5-minute signed URL issued to the
+owner or to an admin.
+
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/wallet/summary` | Available balance, pending deposits/withdrawals, configured limits |
+| `GET /api/wallet/summary` | Available balance, pending/reserved funds, configured limits |
 | `GET /api/transactions` | Paginated history; `filter=all\|deposits\|withdrawals\|games`, optional `type` |
-| `POST /api/deposits/initialize` | Creates a `pending` deposit **before** calling Chapa, returns the checkout URL |
-| `GET /api/deposits/:txRef/status` | Re-verifies a deposit with Chapa on demand (used after the checkout redirect) |
-| `POST /api/deposits/callback` | Chapa webhook; signature-checked, then verified against Chapa before crediting |
+| `GET /api/payment/destinations` | Read-only list of destinations a player may transfer to |
+| `POST /api/deposits/manual` | Submits amount, destination, reference and proof image; creates a **pending** request |
+| `GET /api/deposits/manual` | The player's own manual deposit requests |
+| `GET /api/deposits/:id/proof` | Short-lived signed URL for the proof (owner or admin only) |
 | `POST /api/withdrawals` | Requests a withdrawal, atomically reserving the funds |
 | `GET /api/withdrawals` | The player's own withdrawal requests |
-| `POST /api/withdrawals/:id/cancel` | Cancels a still-pending request and refunds the reservation |
+| `POST /api/withdrawals/:id/cancel` | Cancels a still-pending request and refunds the reservation once |
 
-- **A deposit is never credited from browser input or from the webhook body.**
-  Both the webhook and the status endpoint call Chapa's `/transaction/verify`
-  and compare the amount the provider reports against the stored deposit
-  amount; only then does `complete_deposit` credit the wallet. That function
-  is guarded on `status = 'pending'`, so a replayed webhook is a no-op.
-- The webhook signature is an HMAC-SHA256 of the **raw request body** keyed on
-  `CHAPA_WEBHOOK_SECRET`, compared with `crypto.timingSafeEqual`, so a captured
-  signature cannot authenticate a different payload. Provider payloads are
-  never logged in full.
-- A transient verification failure leaves the deposit `pending` — only an
-  explicit `failed`/`cancelled` status from Chapa marks it failed.
+Admin-only (requires an `ADMIN_EMAILS` account):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/admin/deposits` | Queue of manual deposits, filterable by status |
+| `POST /api/admin/deposits/:id/approve` | Credits the wallet exactly once and writes the ledger row |
+| `POST /api/admin/deposits/:id/reject` | Records reviewer, timestamp and optional reason; balance untouched |
+| `GET /api/admin/withdrawals` | Queue of withdrawal requests |
+| `POST /api/admin/withdrawals/:id/processing` | Marks a request as being paid out |
+| `POST /api/admin/withdrawals/:id/paid` | Marks it paid with an external payment reference (never debits twice) |
+| `POST /api/admin/withdrawals/:id/reject` | Refunds the reservation exactly once |
+
+- **No player-supplied input can credit a balance.** `POST /api/deposits/manual`
+  only ever writes a `pending` row plus the proof object; the response says
+  *"Proof submitted for review"* and carries no balance.
+- Approval runs the `review_manual_deposit` function, which is guarded on the
+  pending state inside the transaction, so retries, refreshes, or two admins
+  clicking at the same time credit the wallet exactly once.
+- Duplicate submissions are rejected with `409` through unique indexes on
+  `(user_id, external_reference)` and `(user_id, idempotency_key)`; the client
+  attaches an `Idempotency-Key` header to every submission.
 - Withdrawals debit and reserve the funds in `request_withdrawal` at request
-  time; `resolve_withdrawal` either completes them or refunds the reservation,
-  and is likewise idempotent.
-- Deposit and withdrawal amounts are validated server-side against the
-  configured minimum/maximum limits (see the environment variables below).
-- Transaction states are explicit: `pending`, `completed`, `failed`,
-  `rejected`, and `cancelled`.
+  time, so reserved money cannot be wagered or withdrawn again;
+  `resolve_withdrawal` either marks them paid or refunds the reservation, and is
+  likewise idempotent and validates the state transition.
+- Deposit and withdrawal amounts, Ethiopian phone formats, and account field
+  lengths are all validated server-side; limits come from `DEPOSIT_MIN_ETB` /
+  `DEPOSIT_MAX_ETB` / `WITHDRAW_MIN_ETB` / `WITHDRAW_MAX_ETB`.
+- Deposit states are `pending`, `approved`, `rejected`, `cancelled`; withdrawal
+  states are `pending`, `processing`, `paid`, `rejected`, `cancelled`.
+- Proof uploads and withdrawal requests are rate-limited. Telegram admin
+  notifications carry only ids, the amount, the destination name and a masked
+  account number — never proof URLs, tokens, or full account numbers.
+
+#### Legacy Chapa gateway
+
+The automatic Chapa endpoints (`/api/deposits/initialize`,
+`/api/deposits/:txRef/status`, `/api/deposits/callback`) are still present but
+respond `503` unless `CHAPA_ENABLED=true` and a secret key are configured. They
+remain fully separate from the manual flow: a manual proof can never trigger a
+Chapa credit, and the Chapa webhook still verifies the payment with the provider
+before `complete_deposit` moves any money.
 
 ### Testing Fast Keno and the wallet in a sandbox
 
 1. Apply `supabase.sql` to your Supabase project (it is re-runnable; the
    `MIGRATIONS FOR EXISTING INSTALLS` block updates an older database in
    place).
-2. Set `CHAPA_SECRET_KEY` to a **test** key (`CHASECK_TEST-...`) and
-   `CHAPA_WEBHOOK_SECRET` to the secret configured in the Chapa dashboard,
-   with the webhook URL pointing at `WEBSITE_URL` +
-   `/api/deposits/callback`.
+2. Create the private storage bucket named by `MANUAL_PROOF_BUCKET` (the SQL
+   file does this for you) and set `MANUAL_PAYMENT_ACCOUNTS_JSON` to your own
+   accounts. Leave `CHAPA_ENABLED` unset.
 3. Start the server, register a user, and open **Games → Fast Keno**. The
    countdown, the round id, and the previous round's numbers are visible
    without signing in; placing a bet requires a session.
@@ -220,9 +291,14 @@ resulting balance.
    returns `409`.
 5. For a faster feedback loop, shorten the round with
    `FAST_KENO_BETTING_MS=5000 FAST_KENO_DRAWING_MS=2000 FAST_KENO_RESULT_MS=2000`.
-6. For deposits, use Chapa's test checkout. After the redirect back to the app
-   the client calls `GET /api/deposits/:txRef/status`, which re-verifies with
-   Chapa — the balance only moves once Chapa confirms the payment.
+6. For deposits, open **Wallet → Deposit**, transfer the money to one of the
+   listed destinations, and upload the receipt. The request stays `pending` and
+   the balance does not move. Sign in with an `ADMIN_EMAILS` account, open the
+   admin panel's **Manual Money Requests** queue, and approve it — the wallet is
+   credited exactly once, no matter how often the approval is retried.
+7. For withdrawals, submit a request from the wallet: the amount is reserved
+   immediately. Cancelling or rejecting refunds it exactly once; marking it paid
+   records the external payment reference without debiting again.
 
 ### Known limitations / responsible-gaming notes
 

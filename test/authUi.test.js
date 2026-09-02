@@ -544,3 +544,140 @@ test('dice target controls mirror the server payout formula without deciding the
     app.close();
   }
 });
+
+const DESTINATIONS_RESPONSE = {
+  ok: true,
+  chapa_enabled: false,
+  notice: 'Transfer the money yourself, then submit your receipt.',
+  limits: { deposit_min: 10, deposit_max: 5000, withdraw_min: 50, withdraw_max: 2500 },
+  destinations: [
+    { id: 'telebirr', type: 'telebirr', bank_name: 'Telebirr', account_holder: 'Lucky Birr', account_number: '0936719379', instructions: null },
+    { id: 'demo-bank', type: 'bank', bank_name: 'Demo Bank', account_holder: 'Example Holder', account_number: '1000000000000', instructions: null }
+  ]
+};
+
+function bootWallet(extraFetch) {
+  return bootFastKeno(() => fastKenoState(), (url, options) => {
+    if (String(url).startsWith('/api/payment/destinations')) return Promise.resolve(jsonResponse(DESTINATIONS_RESPONSE));
+    if (extraFetch) return extraFetch(url, options);
+    return null;
+  });
+}
+
+test('payment destinations come from the server, not from the page source', async () => {
+  // No bank account number or payment phone number may be baked into the shell.
+  const html = readGameShell();
+  assert.ok(!/5236271359011/.test(html), 'no hard-coded bank account number');
+  assert.ok(!/0936719379/.test(html), 'even the Telebirr number is server configuration');
+
+  const app = bootWallet();
+  try {
+    await flush();
+    app.window.showDepositModal();
+    await flush();
+    const card = app.document.getElementById('manualDestinations');
+    assert.match(card.textContent, /Telebirr/);
+    assert.match(card.textContent, /0936719379/);
+    assert.match(card.textContent, /Demo Bank/);
+    assert.match(card.textContent, /Example Holder/);
+
+    const options = [...app.document.getElementById('manualDestinationSelect').options].map((o) => o.value);
+    assert.deepEqual(options, ['telebirr', 'demo-bank']);
+
+    // The legacy automatic gateway stays hidden while it is disabled.
+    assert.equal(app.document.getElementById('depTabChapa').style.display, 'none');
+    assert.equal(app.document.getElementById('depFormManual').style.display, 'flex');
+
+    // Limits shown to the player mirror the server configuration.
+    assert.equal(app.document.getElementById('manualAmountInput').min, '10');
+    assert.equal(app.document.getElementById('manualAmountInput').max, '5000');
+    assert.match(app.document.getElementById('wdLimitsNote').textContent, /50 and 2500/);
+  } finally {
+    app.close();
+  }
+});
+
+test('submitting proof reports it as pending review and never as a completed deposit', async () => {
+  const uploads = [];
+  const app = bootWallet();
+  try {
+    await flush();
+    // Stub the upload transport so the form is exercised without a network.
+    app.window.XMLHttpRequest = function FakeXHR() {
+      this.upload = {};
+      this.open = (method, url) => { this.method = method; this.url = url; };
+      this.setRequestHeader = () => {};
+      this.send = (formData) => {
+        uploads.push({ url: this.url, formData });
+        this.status = 201;
+        this.responseText = JSON.stringify({ ok: true, depositId: 'd1', status: 'pending', message: 'Proof submitted for review' });
+        if (this.upload.onprogress) this.upload.onprogress({ lengthComputable: true, loaded: 5, total: 10 });
+        this.onload();
+      };
+    };
+
+    app.window.showDepositModal();
+    await flush();
+    app.document.getElementById('manualAmountInput').value = '250';
+    app.document.getElementById('manualSenderRef').value = '0912345678';
+    app.document.getElementById('manualExternalRef').value = 'TX-9911';
+    const file = new app.window.File(['x'], 'proof.png', { type: 'image/png' });
+    app.window.handleDepFile({ target: { files: [file] } });
+
+    const balanceBefore = app.document.getElementById('walletBalanceAmount').textContent;
+    await app.window.submitManualDeposit();
+    await flush();
+
+    assert.equal(uploads.length, 1, 'exactly one upload is sent');
+    assert.equal(uploads[0].url, '/api/deposits/manual');
+    assert.equal(uploads[0].formData.get('destination_id'), 'telebirr');
+    assert.equal(uploads[0].formData.get('external_reference'), 'TX-9911');
+    assert.ok(uploads[0].formData.get('idempotency_key'), 'a duplicate-protection key is attached');
+
+    const toast = app.document.getElementById('toast').textContent;
+    assert.match(toast, /Proof submitted for review/);
+    assert.ok(!/successful/i.test(toast), 'never claims the deposit succeeded');
+    assert.equal(app.document.getElementById('walletBalanceAmount').textContent, balanceBefore, 'balance is untouched');
+    assert.equal(app.document.getElementById('depositModal').classList.contains('active'), false);
+  } finally {
+    app.close();
+  }
+});
+
+test('the withdrawal form switches between Telebirr and bank payouts', async () => {
+  let withdrawalRequest = null;
+  const app = bootWallet((url, options) => {
+    if (url === '/api/withdrawals' && options && options.method === 'POST') {
+      withdrawalRequest = options;
+      return Promise.resolve(jsonResponse({ ok: true, withdrawalId: 'w1', balance: 400, message: 'Withdrawal request submitted.' }, 201));
+    }
+    return null;
+  });
+  try {
+    await flush();
+    app.window.showWithdrawModal();
+    await flush();
+
+    assert.equal(app.document.getElementById('wdBankRow').style.display, 'none');
+    app.window.selectWdMethod('bank');
+    assert.equal(app.document.getElementById('wdBankRow').style.display, 'block');
+    assert.match(app.document.getElementById('wdAccountLabel').textContent, /bank account/);
+
+    app.document.getElementById('wdAmountInput').value = '100';
+    app.document.getElementById('wdBankName').value = 'Demo Bank';
+    app.document.getElementById('wdAccountNum').value = '1000000000000';
+    app.document.getElementById('wdAccountName').value = 'Abebe Kebede';
+    await app.window.submitWithdrawal();
+    await flush();
+
+    assert.ok(withdrawalRequest, 'the withdrawal request is sent');
+    assert.ok(withdrawalRequest.headers['Idempotency-Key'], 'withdrawals carry an idempotency key');
+    const body = JSON.parse(withdrawalRequest.body);
+    assert.equal(body.destination_type, 'bank');
+    assert.equal(body.bank_name, 'Demo Bank');
+    // The balance shown updates from the server response, without a reload.
+    assert.equal(app.document.getElementById('walletBalanceAmount').textContent, '400');
+  } finally {
+    app.close();
+  }
+});

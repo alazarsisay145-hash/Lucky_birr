@@ -23,10 +23,13 @@ The supported deployment target is **Render** (Node web service). The repository
 1. Open your Supabase project → **SQL Editor**.
 2. Paste and run the full contents of [`supabase.sql`](supabase.sql). The file is idempotent – safe to re-run on a fresh project or an existing project without data loss.
    - Creates `users`, `submissions`, and `transactions` tables with constraints and indexes.
+   - Creates the `game_rounds` table and `settle_game_round()` function used to atomically settle Keno/Higher-Lower/Aviator bets (integer-cents math, idempotency key, no negative balances). Existing `game_bets`/`debit_balance`/`credit_balance` remain in place; re-running `supabase.sql` on an existing project only adds the new table/function (`CREATE TABLE IF NOT EXISTS` / `CREATE OR REPLACE FUNCTION`), it does not alter or drop existing data.
    - Creates the `screenshots` storage bucket (idempotent `ON CONFLICT DO NOTHING`).
 3. Copy your project credentials from **Settings → API**:
    - **Project URL** → `SUPABASE_URL`
    - **`service_role` secret key** → `SUPABASE_SERVICE_ROLE_KEY` (keep this server-side only)
+
+**Rollback:** `settle_game_round` and `game_rounds` are additive; to roll back this specific change, redeploy the previous app release (older code paths, e.g. `debit_balance`/`credit_balance`, keep working since they were not removed). Dropping `game_rounds`/`settle_game_round` is not required and is destructive to audit history, so it is not part of the recommended rollback path.
 
 ---
 

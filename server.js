@@ -1222,14 +1222,21 @@ app.get('/api/admin/stats', verifyJWT, requireAdmin, async (req, res, next) => {
   }
 });
 
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'Index.html')));
+// The app shell carries all client-side auth JavaScript inline, so it must never
+// be served from a stale browser/proxy cache after a deploy.
+function sendAppShell(res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return res.sendFile(path.join(__dirname, 'Index.html'));
+}
+
+app.get('/', (_req, res) => sendAppShell(res));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/webhook/')) {
     return next();
   }
-  return res.sendFile(path.join(__dirname, 'Index.html'));
+  return sendAppShell(res);
 });
 
 app.use((err, _req, res, _next) => {

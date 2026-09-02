@@ -51,6 +51,22 @@ test('server serves the game shell', async () => {
   }
 });
 
+test('game shell is served with no-store cache headers', async () => {
+  const port = 3133;
+  const { server, getStderr } = spawnServer(port);
+  try {
+    await wait(1200);
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    assert.equal(response.status, 200);
+    const cacheControl = response.headers.get('cache-control') || '';
+    assert.match(cacheControl, /no-store/, 'app shell must not be cached by browsers or proxies');
+    const fallback = await fetch(`http://127.0.0.1:${port}/some/unknown/path`);
+    assert.match(fallback.headers.get('cache-control') || '', /no-store/);
+  } finally {
+    await stopServer(server, getStderr);
+  }
+});
+
 test('server CSP allows the game shell resources to render', async () => {
   const port = 3102;
   const { server, getStderr } = spawnServer(port);
@@ -196,8 +212,8 @@ test('game shell auth flow initializes persisted auth and protects submissions',
   assert.match(html, /async function initAuthState\(\)/);
   assert.match(html, /function getPersistedAuthToken\(\)/);
   assert.match(html, /function formatBlockerList\(items\)/);
-  assert.match(html, /fetch\('\/api\/auth\/login', \{ method: 'POST'/);
-  assert.match(html, /fetch\('\/api\/auth\/register', \{ method: 'POST'/);
+  assert.match(html, /fetchWithTimeout\('\/api\/auth\/login', \{ method: 'POST'/);
+  assert.match(html, /fetchWithTimeout\('\/api\/auth\/register', \{ method: 'POST'/);
   assert.match(html, /fetch\('\/api\/auth\/me', \{ headers:/);
   assert.match(html, /fetch\('\/readyz', \{ cache: 'no-store' \}\)/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ AUTH_TOKEN \}/);

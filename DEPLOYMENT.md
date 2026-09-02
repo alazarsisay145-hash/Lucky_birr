@@ -268,6 +268,29 @@ If you are running without Telegram (admin panel only):
 - Confirm `SUPABASE_SERVICE_ROLE_KEY` is the **service role** key, not the anon/public key
 - Check Render logs for server-side error details (e.g., `Supabase user insert failed: 42P01`)
 
+**Tapping "Sign In" or "Create Account" appears to do nothing**
+
+Work through these steps in order – the first one that produces a result identifies the layer at fault.
+
+1. **Browser console** – open DevTools (desktop) or `chrome://inspect` / Chrome remote debugging (mobile) and reload
+   the page. The auth form handlers are installed inside a `try`/`catch`; if they cannot be installed, the overlay shows
+   *"Sign in is unavailable because the page did not load correctly. Please refresh."* and the console contains
+   `Failed to install auth handlers:`. Any other uncaught error in the console names the failing initialisation step.
+2. **Render POST logs** – open **Render → lucky-birr → Logs**, then tap Sign In once. A working submission logs
+   `POST /api/auth/login <status>`. If no `POST` line appears at all, the request never left the browser (JavaScript or
+   stale cache); if it appears, the failure is server-side and the status code tells you which (`400` malformed input,
+   `401` bad credentials, `429` rate limited, `500`/`503` backend).
+3. **`/readyz`** – open `https://lucky-birr.onrender.com/readyz`. When it is not `ok`, the auth overlay disables both
+   buttons and shows the reason, so "nothing happens" is expected until the underlying check passes.
+4. **Cache reset** – the app shell is now served with `Cache-Control: no-cache, no-store, must-revalidate`, but a browser
+   that cached an older deploy still needs one reset: Chrome → **Settings → Site settings → All sites →
+   `lucky-birr.onrender.com` → Clear and reset**, or simply open the site in an Incognito tab.
+5. **Commit verification** – confirm the running code is the one you expect: **Render → lucky-birr → Events** shows the
+   deployed commit SHA. If it is stale, use **Manual Deploy → Clear build cache & deploy** and wait for **Live**.
+
+Timeouts, network failures, non-JSON responses and non-2xx responses all render a visible message and re-enable the
+button, so a permanently greyed-out or "⏳ Signing in..." button indicates the page is running pre-fix cached JavaScript.
+
 **Telegram notifications not sending** (optional – skip if Telegram is disabled)
 - Verify `TELEGRAM_BOT_TOKEN` and `ADMIN_CHAT_ID` are set (webhook secret is **not** required for notifications)
 - Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`

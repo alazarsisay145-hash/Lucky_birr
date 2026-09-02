@@ -46,6 +46,11 @@ test('server serves the game shell', async () => {
     assert.equal(response.status, 200);
     assert.match(body, /LUCKY BIRR/i);
     assert.match(body, /Tap to Buy/i);
+    assert.match(
+      response.headers.get('cache-control') || '',
+      /no-store/,
+      'app shell must not be cached so deploys cannot leave stale JavaScript in mobile browsers'
+    );
   } finally {
     await stopServer(server, getStderr);
   }
@@ -183,11 +188,16 @@ test('game shell auth flow stores and restores AUTH_TOKEN', () => {
   const html = readGameShell();
   assert.match(html, /const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN'/);
   assert.match(html, /const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token'/);
-  assert.match(html, /localStorage\.setItem\(AUTH_TOKEN_STORAGE_KEY, token\)/);
-  assert.match(html, /localStorage\.getItem\(AUTH_TOKEN_STORAGE_KEY\)/);
-  assert.match(html, /localStorage\.removeItem\(AUTH_TOKEN_STORAGE_KEY\)/);
-  assert.match(html, /localStorage\.removeItem\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
-  assert.match(html, /localStorage\.getItem\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /writeAuthStorage\(AUTH_TOKEN_STORAGE_KEY, token\)/);
+  assert.match(html, /readAuthStorage\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /removeAuthStorage\(AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /removeAuthStorage\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
+  assert.match(html, /readAuthStorage\(LEGACY_AUTH_TOKEN_STORAGE_KEY\)/);
+  // The storage helpers must be the only direct localStorage access so that a
+  // WebView with storage disabled cannot break authentication.
+  assert.match(html, /function readAuthStorage\(key\)[\s\S]*?localStorage\.getItem\(key\)/);
+  assert.match(html, /function writeAuthStorage\(key, value\)[\s\S]*?localStorage\.setItem\(key, value\)/);
+  assert.match(html, /function removeAuthStorage\(key\)[\s\S]*?localStorage\.removeItem\(key\)/);
 });
 
 test('game shell auth flow initializes persisted auth and protects submissions', () => {
@@ -196,8 +206,8 @@ test('game shell auth flow initializes persisted auth and protects submissions',
   assert.match(html, /async function initAuthState\(\)/);
   assert.match(html, /function getPersistedAuthToken\(\)/);
   assert.match(html, /function formatBlockerList\(items\)/);
-  assert.match(html, /fetch\('\/api\/auth\/login', \{ method: 'POST'/);
-  assert.match(html, /fetch\('\/api\/auth\/register', \{ method: 'POST'/);
+  assert.match(html, /postAuthJson\('\/api\/auth\/login', \{ email, password \}\)/);
+  assert.match(html, /postAuthJson\('\/api\/auth\/register', \{ email, phone, password, fullName \}\)/);
   assert.match(html, /fetch\('\/api\/auth\/me', \{ headers:/);
   assert.match(html, /fetch\('\/readyz', \{ cache: 'no-store' \}\)/);
   assert.match(html, /headers: \{ 'Authorization': 'Bearer ' \+ AUTH_TOKEN \}/);

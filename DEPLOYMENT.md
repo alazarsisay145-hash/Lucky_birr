@@ -268,6 +268,40 @@ If you are running without Telegram (admin panel only):
 - Confirm `SUPABASE_SERVICE_ROLE_KEY` is the **service role** key, not the anon/public key
 - Check Render logs for server-side error details (e.g., `Supabase user insert failed: 42P01`)
 
+**"Sign In / Create Account does nothing" (no request reaches the server)**
+
+Work through these steps in order. Stop as soon as a step explains the failure.
+
+1. **Confirm the request never leaves the browser.** Open **Render → Logs**, tap **Sign In**, and
+   look for `POST /api/auth/login`. If that line appears, the problem is server-side – read the
+   status code (`400` invalid input, `401` wrong credentials, `500`/`503` backend) and use the
+   sections above. If no `POST` line appears, continue.
+2. **Read the browser console.** On Android Chrome, connect the phone over USB and open
+   `chrome://inspect` on a desktop; on iOS Safari, use **Develop → iPhone**. In Telegram, open the
+   app in an external browser instead of the in-app WebView. The shell logs safe diagnostics such as
+   `Auth forms missing from the document.`, `Authentication initialization failed:`,
+   `Skipped listener for missing element:` and `Local storage is unavailable:`.
+   Passwords are never logged.
+3. **Look for the on-screen fallback.** If the critical auth JavaScript cannot start, the auth
+   overlay shows a red *"Sign-in could not start. Please reload the page."* banner. That means the
+   browser is running a broken or partially loaded copy of `Index.html` – reload with cache reset.
+4. **Reset the cached page.** The server now sends `Cache-Control: no-cache, no-store,
+   must-revalidate` for the app shell, but an older cached copy can persist from before this change.
+   Chrome → **Settings → Site settings → All sites → `lucky-birr.onrender.com` → Clear and reset**,
+   or simply open the site in an Incognito tab.
+5. **Verify the deployed commit.** Render → service → **Events**. The active deploy must be the
+   latest `main` commit. If it is not, use **Manual Deploy → Clear build cache & deploy** and wait
+   for **Live**.
+6. **Re-check `/readyz`.** If it is not `200`, the overlay disables the auth buttons on purpose and
+   shows the reason under the logo; fix the reported blocker and press **Retry**.
+7. **Check `WEBSITE_URL`.** Same-origin submissions from `https://lucky-birr.onrender.com` do not
+   require CORS, so a wrong `WEBSITE_URL` cannot block Sign In from the app itself – but it does
+   block other origins. It must match the public HTTPS URL exactly, with no trailing slash.
+8. **Timeouts.** Auth requests abort after 20 seconds and display
+   *"The request timed out. Please check your connection and try again."*, and the button always
+   returns to its idle label. A button stuck on `⏳ Signing in...` therefore indicates stale
+   JavaScript, not a hung request – repeat step 4.
+
 **Telegram notifications not sending** (optional – skip if Telegram is disabled)
 - Verify `TELEGRAM_BOT_TOKEN` and `ADMIN_CHAT_ID` are set (webhook secret is **not** required for notifications)
 - Test bot token: `curl https://api.telegram.org/bot<TOKEN>/getMe`

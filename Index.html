@@ -588,6 +588,15 @@
         }
         .auth-setup-status.show { display: block; }
 
+        .auth-fatal {
+            margin: 12px auto 0; max-width: 360px;
+            color: #fca5a5; font-size: 12px; line-height: 1.5;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 10px 12px; border-radius: 10px; display: none;
+        }
+        .auth-fatal.show { display: block; }
+
         .auth-screen { display: none; }
         .auth-screen.active { display: block; }
 
@@ -856,24 +865,25 @@
         </div>
         <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL. It appears after signing in with a configured admin email.</div>
         <div class="auth-setup-status" id="authSetupStatus"></div>
+        <div class="auth-fatal" id="authFatalError" role="alert"></div>
 
         <!-- Login Screen -->
         <div class="auth-screen active" id="screenLoginAuth">
             <div class="auth-card">
                 <div class="auth-title">Welcome back</div>
-                <div id="loginError" class="auth-error"></div>
-                <div class="auth-form">
+                <div id="loginError" class="auth-error" role="alert" aria-live="polite"></div>
+                <form class="auth-form" id="loginForm" novalidate>
                     <div class="auth-input-group">
                         <label for="loginEmail">Email</label>
-                        <input class="auth-input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                        <input class="auth-input" id="loginEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email">
                     </div>
                     <div class="auth-input-group">
                         <label for="loginPassword">Password</label>
-                        <input class="auth-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+                        <input class="auth-input" id="loginPassword" name="password" type="password" placeholder="••••••••" autocomplete="current-password">
                     </div>
-                    <button class="auth-btn" id="loginBtn" onclick="doLogin()">Sign In</button>
-                </div>
-                <div class="auth-link">Don't have an account? <a onclick="showRegisterScreen()">Register</a></div>
+                    <button class="auth-btn" id="loginBtn" type="submit">Sign In</button>
+                </form>
+                <div class="auth-link">Don't have an account? <a id="goRegisterLink" role="button" tabindex="0">Register</a></div>
             </div>
         </div>
 
@@ -881,33 +891,33 @@
         <div class="auth-screen" id="screenRegisterAuth">
             <div class="auth-card">
                 <div class="auth-title">Create account</div>
-                <div id="registerError" class="auth-error"></div>
-                <div class="auth-form">
+                <div id="registerError" class="auth-error" role="alert" aria-live="polite"></div>
+                <form class="auth-form" id="registerForm" novalidate>
                     <div class="auth-input-group">
                         <label for="regFullName">Full Name</label>
-                        <input class="auth-input" id="regFullName" type="text" placeholder="Abebe Kebede" autocomplete="name">
+                        <input class="auth-input" id="regFullName" name="fullName" type="text" placeholder="Abebe Kebede" autocomplete="name">
                     </div>
                     <div class="auth-input-group">
                         <label for="regEmail">Email</label>
-                        <input class="auth-input" id="regEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                        <input class="auth-input" id="regEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email">
                     </div>
                     <div class="auth-input-group">
                         <label for="regPhone">Phone (optional)</label>
-                        <input class="auth-input" id="regPhone" type="tel" placeholder="0911234567" autocomplete="tel">
+                        <input class="auth-input" id="regPhone" name="phone" type="tel" placeholder="0911234567" autocomplete="tel">
                     </div>
                     <div class="auth-input-group">
                         <label for="regPassword">Password</label>
-                        <input class="auth-input" id="regPassword" type="password" placeholder="Min 8 chars, upper+lower+number" autocomplete="new-password" oninput="updatePwStrength()">
+                        <input class="auth-input" id="regPassword" name="password" type="password" placeholder="Min 8 chars, upper+lower+number" autocomplete="new-password">
                         <div class="pw-strength"><div class="pw-strength-bar" id="pwStrengthBar"></div></div>
                         <div class="pw-hint" id="pwHint">At least 8 characters with uppercase, lowercase and number</div>
                     </div>
                     <div class="auth-input-group">
                         <label for="regConfirm">Confirm Password</label>
-                        <input class="auth-input" id="regConfirm" type="password" placeholder="Repeat password" autocomplete="new-password">
+                        <input class="auth-input" id="regConfirm" name="confirmPassword" type="password" placeholder="Repeat password" autocomplete="new-password">
                     </div>
-                    <button class="auth-btn" id="registerBtn" onclick="doRegister()">Create Account</button>
-                </div>
-                <div class="auth-link">Already have an account? <a onclick="showLoginScreen()">Sign In</a></div>
+                    <button class="auth-btn" id="registerBtn" type="submit">Create Account</button>
+                </form>
+                <div class="auth-link">Already have an account? <a id="goLoginLink" role="button" tabindex="0">Sign In</a></div>
             </div>
         </div>
     </div>
@@ -1560,26 +1570,78 @@
         const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
         const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token';
         const AUTH_LOADING_OPACITY = '0.55';
+        const AUTH_REQUEST_TIMEOUT_MS = 20000;
         let AUTH_TOKEN = null;
         let currentUser = null;
+        let loginRequestInFlight = false;
+        let registerRequestInFlight = false;
+
+        // Safe DOM helpers – a single missing element must never abort initialization.
+        function bindElementEvent(id, type, handler, options) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.warn('Skipped listener for missing element:', id);
+                return null;
+            }
+            el.addEventListener(type, handler, options);
+            return el;
+        }
+
+        function showFatalAuthError(message) {
+            const el = document.getElementById('authFatalError');
+            if (!el) return;
+            el.textContent = message;
+            el.classList.add('show');
+        }
+
+        function readAuthStorage(key) {
+            try {
+                return localStorage.getItem(key);
+            } catch (error) {
+                console.warn('Local storage is unavailable:', error && error.name);
+                return null;
+            }
+        }
+
+        function writeAuthStorage(key, value) {
+            try {
+                localStorage.setItem(key, value);
+            } catch (error) {
+                console.warn('Local storage is unavailable:', error && error.name);
+            }
+        }
+
+        function removeAuthStorage(key) {
+            try {
+                localStorage.removeItem(key);
+            } catch (error) {
+                console.warn('Local storage is unavailable:', error && error.name);
+            }
+        }
 
         function showLoginScreen() {
-            document.getElementById('screenLoginAuth').classList.add('active');
-            document.getElementById('screenRegisterAuth').classList.remove('active');
+            const login = document.getElementById('screenLoginAuth');
+            const register = document.getElementById('screenRegisterAuth');
+            if (login) login.classList.add('active');
+            if (register) register.classList.remove('active');
         }
 
         function showRegisterScreen() {
-            document.getElementById('screenRegisterAuth').classList.add('active');
-            document.getElementById('screenLoginAuth').classList.remove('active');
+            const login = document.getElementById('screenLoginAuth');
+            const register = document.getElementById('screenRegisterAuth');
+            if (register) register.classList.add('active');
+            if (login) login.classList.remove('active');
         }
 
         function setAuthError(id, msg) {
             const el = document.getElementById(id);
+            if (!el) return;
             el.textContent = msg;
             el.classList.toggle('show', !!msg);
         }
 
         function setAuthButtonState(btn, isLoading, idleText, loadingText) {
+            if (!btn) return;
             btn.disabled = isLoading;
             btn.textContent = isLoading ? loadingText : idleText;
             btn.style.opacity = isLoading ? AUTH_LOADING_OPACITY : '';
@@ -1593,26 +1655,26 @@
         function saveAuthSession(token, user) {
             AUTH_TOKEN = token;
             currentUser = user;
-            localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            writeAuthStorage(AUTH_TOKEN_STORAGE_KEY, token);
+            removeAuthStorage(LEGACY_AUTH_TOKEN_STORAGE_KEY);
         }
 
         function clearAuthSession() {
             AUTH_TOKEN = null;
             currentUser = null;
-            localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-            localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            removeAuthStorage(AUTH_TOKEN_STORAGE_KEY);
+            removeAuthStorage(LEGACY_AUTH_TOKEN_STORAGE_KEY);
         }
 
         function getPersistedAuthToken() {
-            const stored = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            const stored = readAuthStorage(AUTH_TOKEN_STORAGE_KEY);
             if (stored) {
                 return stored;
             }
-            const legacy = localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            const legacy = readAuthStorage(LEGACY_AUTH_TOKEN_STORAGE_KEY);
             if (legacy) {
-                localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, legacy);
-                localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+                writeAuthStorage(AUTH_TOKEN_STORAGE_KEY, legacy);
+                removeAuthStorage(LEGACY_AUTH_TOKEN_STORAGE_KEY);
                 return legacy;
             }
             return null;
@@ -1637,7 +1699,8 @@
         }
 
         function showAuthOverlay() {
-            document.getElementById('authOverlay').classList.remove('hidden');
+            const overlay = document.getElementById('authOverlay');
+            if (overlay) overlay.classList.remove('hidden');
             showLoginScreen();
             loadAuthSetupStatus();
             checkSendReady();
@@ -1652,6 +1715,7 @@
 
         function setAuthSetupStatus(message, disableButtons) {
             const el = document.getElementById('authSetupStatus');
+            if (!el) return;
             el.textContent = '';
             if (message) {
                 el.appendChild(document.createTextNode(message));
@@ -1706,14 +1770,16 @@
 
         function bindAuthErrorClear(inputIds, errorId) {
             inputIds.forEach((id) => {
-                document.getElementById(id).addEventListener('input', () => setAuthError(errorId, ''));
+                bindElementEvent(id, 'input', () => setAuthError(errorId, ''));
             });
         }
 
         function updatePwStrength() {
-            const pw = document.getElementById('regPassword').value;
+            const pwInput = document.getElementById('regPassword');
             const bar = document.getElementById('pwStrengthBar');
             const hint = document.getElementById('pwHint');
+            if (!pwInput || !bar || !hint) return;
+            const pw = pwInput.value;
             let score = 0;
             if (pw.length >= 8) score++;
             if (/[A-Z]/.test(pw)) score++;
@@ -1727,44 +1793,86 @@
                                score === 3 ? 'Fair – almost there' : 'Strong password ✓';
         }
 
+        function describeAuthFailure(error) {
+            if (error && error.name === 'AbortError') {
+                return 'The request timed out. Please check your connection and try again.';
+            }
+            return 'Network error. Please try again.';
+        }
+
+        // Same-origin JSON POST with a bounded timeout so the button can never stay stuck.
+        async function postAuthJson(url, payload) {
+            const controller = typeof AbortController === 'function' ? new AbortController() : null;
+            const timer = controller
+                ? setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
+                : null;
+            try {
+                return await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    signal: controller ? controller.signal : undefined
+                });
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        }
+
         async function doLogin() {
-            const email = document.getElementById('loginEmail').value.trim();
-            const password = document.getElementById('loginPassword').value;
+            if (loginRequestInFlight) return;
+            const emailInput = document.getElementById('loginEmail');
+            const passwordInput = document.getElementById('loginPassword');
+            if (!emailInput || !passwordInput) {
+                showFatalAuthError('Sign-in form is unavailable. Please reload the page.');
+                return;
+            }
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
             setAuthError('loginError', '');
             if (!email || !password) {
                 setAuthError('loginError', 'Email and password are required');
                 return;
             }
             const btn = document.getElementById('loginBtn');
+            loginRequestInFlight = true;
             setAuthButtonState(btn, true, 'Sign In', '⏳ Signing in...');
             try {
-                const resp = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
+                const resp = await postAuthJson('/api/auth/login', { email, password });
                 const data = await readJsonResponse(resp, 'Login response');
                 if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    console.error('Login failed:', resp.status, data);
+                    console.error('Login failed:', resp.status);
                     setAuthError('loginError', getAuthErrorMessage(resp, data, 'Please enter your email and password'));
                 }
             } catch (error) {
-                console.error('Login request failed:', error);
-                setAuthError('loginError', 'Network error. Please try again.');
+                console.error('Login request failed:', error && error.name);
+                setAuthError('loginError', describeAuthFailure(error));
             } finally {
+                loginRequestInFlight = false;
                 setAuthButtonState(btn, false, 'Sign In', '⏳ Signing in...');
             }
         }
 
         async function doRegister() {
-            const fullName = document.getElementById('regFullName').value.trim();
-            const email = document.getElementById('regEmail').value.trim();
-            const phone = document.getElementById('regPhone').value.trim();
-            const password = document.getElementById('regPassword').value;
-            const confirm = document.getElementById('regConfirm').value;
+            if (registerRequestInFlight) return;
+            const nameInput = document.getElementById('regFullName');
+            const emailInput = document.getElementById('regEmail');
+            const phoneInput = document.getElementById('regPhone');
+            const passwordInput = document.getElementById('regPassword');
+            const confirmInput = document.getElementById('regConfirm');
+            if (!emailInput || !passwordInput || !confirmInput) {
+                showFatalAuthError('Registration form is unavailable. Please reload the page.');
+                return;
+            }
+            const fullName = nameInput ? nameInput.value.trim() : '';
+            const email = emailInput.value.trim();
+            const phone = phoneInput ? phoneInput.value.trim() : '';
+            const password = passwordInput.value;
+            const confirm = confirmInput.value;
             setAuthError('registerError', '');
 
             if (!email || !password) {
@@ -1781,48 +1889,86 @@
             }
 
             const btn = document.getElementById('registerBtn');
+            registerRequestInFlight = true;
             setAuthButtonState(btn, true, 'Create Account', '⏳ Creating account...');
             try {
-                const resp = await fetch('/api/auth/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, phone, password, fullName })
-                });
+                const resp = await postAuthJson('/api/auth/register', { email, phone, password, fullName });
                 const data = await readJsonResponse(resp, 'Register response');
                 if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    console.error('Registration failed:', resp.status, data);
+                    console.error('Registration failed:', resp.status);
                     setAuthError('registerError', getAuthErrorMessage(resp, data, 'Please review your registration details'));
                 }
             } catch (error) {
-                console.error('Registration request failed:', error);
-                setAuthError('registerError', 'Network error. Please try again.');
+                console.error('Registration request failed:', error && error.name);
+                setAuthError('registerError', describeAuthFailure(error));
             } finally {
+                registerRequestInFlight = false;
                 setAuthButtonState(btn, false, 'Create Account', '⏳ Creating account...');
             }
         }
 
+        // Installed as early as possible and independently of the rest of the UI bootstrap.
+        function installAuthHandlers() {
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            if (!loginForm || !registerForm) {
+                showFatalAuthError('Sign-in could not start. Please reload the page.');
+                console.error('Auth forms missing from the document.');
+                return false;
+            }
+            loginForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                doLogin();
+            });
+            registerForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                doRegister();
+            });
+            bindElementEvent('goRegisterLink', 'click', showRegisterScreen);
+            bindElementEvent('goLoginLink', 'click', showLoginScreen);
+            bindElementEvent('regPassword', 'input', updatePwStrength);
+            bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
+            bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
+            return true;
+        }
+
+        try {
+            if (!installAuthHandlers()) {
+                console.error('Authentication handlers were not installed.');
+            }
+        } catch (error) {
+            console.error('Authentication initialization failed:', error);
+            showFatalAuthError('Sign-in could not start. Please reload the page.');
+        }
+
         function onAuthSuccess() {
-            document.getElementById('authOverlay').classList.add('hidden');
+            const overlay = document.getElementById('authOverlay');
+            if (overlay) overlay.classList.add('hidden');
             setAuthSetupStatus('', false);
-            // Show user info in header
-            const name = currentUser.fullName || currentUser.email || 'Player';
-            document.getElementById('headerUserName').textContent = name.split(' ')[0];
-            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0).toLocaleString() + ' ETB';
-            document.getElementById('userInfoBar').classList.add('show');
-            // Update admin state from server
-            isAdmin = currentUser.isAdmin === true;
-            updateAdminToggleVisibility();
-            checkSendReady();
-            updateGameBalancePills();
-            // Set wallet balance display
-            document.getElementById('walletBalanceAmount').textContent = (currentUser.balance || 0).toLocaleString();
+            try {
+                // Show user info in header
+                const name = currentUser.fullName || currentUser.email || 'Player';
+                document.getElementById('headerUserName').textContent = name.split(' ')[0];
+                document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0).toLocaleString() + ' ETB';
+                document.getElementById('userInfoBar').classList.add('show');
+                // Update admin state from server
+                isAdmin = currentUser.isAdmin === true;
+                updateAdminToggleVisibility();
+                checkSendReady();
+                updateGameBalancePills();
+                // Set wallet balance display
+                document.getElementById('walletBalanceAmount').textContent = (currentUser.balance || 0).toLocaleString();
+            } catch (error) {
+                console.error('Post-authentication UI update failed:', error);
+            }
         }
 
         function updateAdminToggleVisibility() {
             const btn = document.getElementById('adminToggle');
+            if (!btn) return;
             btn.style.display = isAdmin ? '' : 'none';
         }
 
@@ -2266,16 +2412,20 @@
         }
 
         function checkSendReady() {
-            const amount = document.getElementById('paymentAmount').value;
+            const amountInput = document.getElementById('paymentAmount');
+            const sendBtn = document.getElementById('sendBtn');
+            if (!amountInput || !sendBtn) return;
+            const amount = amountInput.value;
             const authed = !!(AUTH_TOKEN && currentUser);
-            document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0 && authed);
+            sendBtn.disabled = !(screenshotFile && amount && parseInt(amount) > 0 && authed);
         }
 
-        document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
-        document.getElementById('screenshotUpload').addEventListener('keydown', (event) => {
+        bindElementEvent('paymentAmount', 'input', checkSendReady);
+        bindElementEvent('screenshotUpload', 'keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                document.getElementById('fileInput').click();
+                const fileInput = document.getElementById('fileInput');
+                if (fileInput) fileInput.click();
             }
         });
         document.addEventListener('keydown', (event) => {
@@ -2283,14 +2433,6 @@
                 closeModal();
             }
         });
-        document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') doLogin();
-        });
-        document.getElementById('regConfirm').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') doRegister();
-        });
-        bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
-        bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
 
         async function sendScreenshot() {
             const amount = document.getElementById('paymentAmount').value;
@@ -3114,11 +3256,20 @@
         }
 
         // Close modals on overlay click
-        document.getElementById('depositModal').addEventListener('click', function(e) { if (e.target === this) closeDepositModal(); });
-        document.getElementById('withdrawModal').addEventListener('click', function(e) { if (e.target === this) closeWithdrawModal(); });
+        bindElementEvent('depositModal', 'click', function (e) { if (e.target === this) closeDepositModal(); });
+        bindElementEvent('withdrawModal', 'click', function (e) { if (e.target === this) closeWithdrawModal(); });
 
-        initTier('standard');
-        initAuthState();
+        try {
+            initTier('standard');
+        } catch (error) {
+            console.error('Ticket tier initialization failed:', error);
+        }
+        try {
+            initAuthState();
+        } catch (error) {
+            console.error('Auth state initialization failed:', error);
+            showAuthOverlay();
+        }
     </script>
 </body>
 </html>

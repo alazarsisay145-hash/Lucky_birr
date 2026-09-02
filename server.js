@@ -1222,14 +1222,24 @@ app.get('/api/admin/stats', verifyJWT, requireAdmin, async (req, res, next) => {
   }
 });
 
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'Index.html')));
+// The app shell carries all inline JavaScript, so it must never be served from a
+// stale browser or proxy cache after a deploy.
+function sendAppShell(res, next) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return res.sendFile(path.join(__dirname, 'Index.html'), (error) => {
+    if (error) return next(error);
+    return undefined;
+  });
+}
+
+app.get('/', (_req, res, next) => sendAppShell(res, next));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/webhook/')) {
     return next();
   }
-  return res.sendFile(path.join(__dirname, 'Index.html'));
+  return sendAppShell(res, next);
 });
 
 app.use((err, _req, res, _next) => {

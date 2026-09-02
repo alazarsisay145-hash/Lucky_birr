@@ -68,6 +68,48 @@ create table if not exists withdrawals (
 create index if not exists withdrawals_user_id_idx on withdrawals(user_id);
 create index if not exists withdrawals_status_idx on withdrawals(status);
 
+-- ===== FAST KENO =====
+-- Shared, server-scheduled rapid rounds. The round index is derived from wall
+-- clock time (see lib/fastKeno.js) so every process agrees on the schedule;
+-- only the draw is random and it is written exactly once per round.
+create table if not exists fast_keno_rounds (
+  round_index bigint primary key,
+  round_id text unique not null,
+  drawn jsonb not null,
+  math_version text not null,
+  drawn_at timestamptz not null default now()
+);
+
+create index if not exists fast_keno_rounds_drawn_at_idx on fast_keno_rounds(drawn_at desc);
+
+-- One bet per player per round. The stake is debited when the bet is accepted
+-- (never at settlement) so a player can not spend the same balance twice while
+-- a round is running. `settled_at`/`status` make settlement idempotent.
+create table if not exists fast_keno_bets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  round_index bigint not null,
+  round_id text not null,
+  idempotency_key text not null,
+  math_version text not null,
+  picks jsonb not null,
+  stake_cents bigint not null check (stake_cents > 0),
+  payout_cents bigint not null default 0 check (payout_cents >= 0),
+  hits integer,
+  multiplier numeric,
+  matched jsonb,
+  status text not null default 'pending' check (status in ('pending', 'settled', 'refunded')),
+  created_at timestamptz not null default now(),
+  settled_at timestamptz,
+  unique (user_id, round_index),
+  unique (user_id, idempotency_key)
+);
+
+create index if not exists fast_keno_bets_user_id_idx on fast_keno_bets(user_id);
+create index if not exists fast_keno_bets_status_idx on fast_keno_bets(status);
+create index if not exists fast_keno_bets_round_idx on fast_keno_bets(round_index desc);
+
+
 -- ===== GAME BETS TABLE (legacy summary log — kept for backward compatibility) =====
 create table if not exists game_bets (
   id uuid primary key default gen_random_uuid(),
@@ -220,6 +262,268 @@ begin
   end if;
 
   return query select new_round_id, new_balance_cents, false;
+end;
+$$;
+
+
+-- ===== MIGRATIONS FOR EXISTING INSTALLS =====
+-- Safe to re-run. These widen existing CHECK constraints so previously
+-- deployed databases accept the games and transaction states added later.
+alter table game_bets drop constraint if exists game_bets_game_check;
+alter table game_bets add constraint game_bets_game_check
+  check (game in ('keno', 'higher_lower', 'aviator', 'dice', 'fast_keno'));
+
+alter table game_rounds drop constraint if exists game_rounds_game_check;
+alter table game_rounds add constraint game_rounds_game_check
+  check (game in ('keno', 'higher_lower', 'aviator', 'dice', 'fast_keno'));
+
+alter table deposits drop constraint if exists deposits_status_check;
+alter table deposits add constraint deposits_status_check
+  check (status in ('pending', 'completed', 'failed', 'cancelled'));
+
+alter table withdrawals drop constraint if exists withdrawals_status_check;
+alter table withdrawals add constraint withdrawals_status_check
+  check (status in ('pending', 'completed', 'rejected', 'cancelled'));
+
+alter table withdrawals add column if not exists idempotency_key text;
+create unique index if not exists withdrawals_user_idempotency_idx
+  on withdrawals(user_id, idempotency_key) where idempotency_key is not null;
+
+-- ===== FAST KENO FUNCTIONS =====
+-- place_fast_keno_bet: atomically reserve (debit) the stake and record the bet.
+-- The unique (user_id, round_index) and (user_id, idempotency_key) constraints
+-- mean a retried or concurrent request can never debit twice: the second
+-- insert loses and the already-recorded bet is returned unchanged.
+create or replace function place_fast_keno_bet(
+  p_user_id uuid,
+  p_round_index bigint,
+  p_round_id text,
+  p_idempotency_key text,
+  p_math_version text,
+  p_picks jsonb,
+  p_stake_cents bigint
+) returns table(bet_id uuid, balance_after_cents bigint, replayed boolean)
+language plpgsql as $$
+declare
+  existing fast_keno_bets%rowtype;
+  cur_balance numeric;
+  cur_balance_cents bigint;
+  new_balance_cents bigint;
+  new_bet_id uuid;
+begin
+  if p_stake_cents is null or p_stake_cents <= 0 then
+    raise exception 'Invalid stake';
+  end if;
+
+  select * into existing from fast_keno_bets
+    where user_id = p_user_id
+      and (round_index = p_round_index or idempotency_key = p_idempotency_key)
+    limit 1;
+  if found then
+    select balance into cur_balance from users where id = p_user_id;
+    return query select existing.id, round(cur_balance * 100)::bigint, true;
+    return;
+  end if;
+
+  select balance into cur_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'User not found';
+  end if;
+
+  cur_balance_cents := round(cur_balance * 100)::bigint;
+  if cur_balance_cents < p_stake_cents then
+    raise exception 'Insufficient balance';
+  end if;
+  new_balance_cents := cur_balance_cents - p_stake_cents;
+
+  update users set balance = new_balance_cents::numeric / 100, updated_at = now() where id = p_user_id;
+
+  insert into fast_keno_bets (
+    user_id, round_index, round_id, idempotency_key, math_version, picks, stake_cents
+  ) values (
+    p_user_id, p_round_index, p_round_id, p_idempotency_key, p_math_version, p_picks, p_stake_cents
+  ) returning id into new_bet_id;
+
+  insert into transactions(user_id, amount, type, description)
+  values (p_user_id, -p_stake_cents::numeric / 100, 'game_loss', 'fast_keno stake ' || p_round_id);
+
+  return query select new_bet_id, new_balance_cents, false;
+end;
+$$;
+
+-- settle_fast_keno_bet: credit the payout exactly once. The status guard makes
+-- replays (retries, overlapping settlement passes, multiple instances) no-ops.
+create or replace function settle_fast_keno_bet(
+  p_bet_id uuid,
+  p_payout_cents bigint,
+  p_hits integer,
+  p_multiplier numeric,
+  p_matched jsonb
+) returns table(balance_after_cents bigint, settled boolean)
+language plpgsql as $$
+declare
+  bet fast_keno_bets%rowtype;
+  cur_balance_cents bigint;
+  new_balance_cents bigint;
+begin
+  if p_payout_cents is null or p_payout_cents < 0 then
+    raise exception 'Invalid payout';
+  end if;
+
+  select * into bet from fast_keno_bets where id = p_bet_id for update;
+  if not found then
+    raise exception 'Bet not found';
+  end if;
+
+  select round(balance * 100)::bigint into cur_balance_cents from users where id = bet.user_id for update;
+
+  if bet.status <> 'pending' then
+    return query select cur_balance_cents, false;
+    return;
+  end if;
+
+  new_balance_cents := cur_balance_cents + p_payout_cents;
+  update users set balance = new_balance_cents::numeric / 100, updated_at = now() where id = bet.user_id;
+
+  update fast_keno_bets set
+    status = 'settled',
+    payout_cents = p_payout_cents,
+    hits = p_hits,
+    multiplier = p_multiplier,
+    matched = p_matched,
+    settled_at = now()
+  where id = p_bet_id;
+
+  if p_payout_cents > 0 then
+    insert into transactions(user_id, amount, type, description)
+    values (bet.user_id, p_payout_cents::numeric / 100, 'game_win', 'fast_keno win ' || bet.round_id);
+  end if;
+
+  return query select new_balance_cents, true;
+end;
+$$;
+
+-- ===== WALLET FUNCTIONS =====
+-- complete_deposit: credit a verified deposit exactly once. Called only after
+-- the server has verified the payment with Chapa; the amount always comes from
+-- the stored deposit row, never from the callback payload.
+create or replace function complete_deposit(p_tx_ref text)
+returns table(credited boolean, user_id uuid, amount numeric)
+language plpgsql as $$
+declare
+  dep deposits%rowtype;
+begin
+  select * into dep from deposits where tx_ref = p_tx_ref for update;
+  if not found then
+    raise exception 'Deposit not found';
+  end if;
+  if dep.status <> 'pending' then
+    return query select false, dep.user_id, dep.amount;
+    return;
+  end if;
+
+  update deposits set status = 'completed', updated_at = now() where id = dep.id;
+  update users set balance = balance + dep.amount, updated_at = now() where id = dep.user_id;
+  insert into transactions(user_id, amount, type, description)
+  values (dep.user_id, dep.amount, 'deposit', 'Deposit confirmed (' || dep.tx_ref || ')');
+
+  return query select true, dep.user_id, dep.amount;
+end;
+$$;
+
+-- request_withdrawal: atomically check funds, debit (reserve) them and record
+-- the request. Idempotent through (user_id, idempotency_key).
+create or replace function request_withdrawal(
+  p_user_id uuid,
+  p_amount numeric,
+  p_payment_method text,
+  p_account_number text,
+  p_account_name text,
+  p_idempotency_key text
+) returns table(withdrawal_id uuid, balance_after_cents bigint, replayed boolean)
+language plpgsql as $$
+declare
+  existing withdrawals%rowtype;
+  cur_balance numeric;
+  new_balance numeric;
+  new_id uuid;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Invalid amount';
+  end if;
+
+  if p_idempotency_key is not null then
+    select * into existing from withdrawals
+      where user_id = p_user_id and idempotency_key = p_idempotency_key;
+    if found then
+      select balance into cur_balance from users where id = p_user_id;
+      return query select existing.id, round(cur_balance * 100)::bigint, true;
+      return;
+    end if;
+  end if;
+
+  select balance into cur_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'User not found';
+  end if;
+  if cur_balance < p_amount then
+    raise exception 'Insufficient balance';
+  end if;
+
+  new_balance := cur_balance - p_amount;
+  update users set balance = new_balance, updated_at = now() where id = p_user_id;
+
+  insert into withdrawals(user_id, amount, payment_method, account_number, account_name, status, idempotency_key)
+  values (p_user_id, p_amount, p_payment_method, p_account_number, p_account_name, 'pending', p_idempotency_key)
+  returning id into new_id;
+
+  insert into transactions(user_id, amount, type, description)
+  values (p_user_id, -p_amount, 'withdrawal', 'Withdrawal request via ' || p_payment_method);
+
+  return query select new_id, round(new_balance * 100)::bigint, false;
+end;
+$$;
+
+-- resolve_withdrawal: move a pending withdrawal to a terminal state exactly
+-- once, refunding the reserved amount for rejected/cancelled requests.
+create or replace function resolve_withdrawal(
+  p_withdrawal_id uuid,
+  p_status text,
+  p_user_id uuid,
+  p_admin_notes text
+) returns table(resolved boolean, refunded boolean)
+language plpgsql as $$
+declare
+  wd withdrawals%rowtype;
+begin
+  if p_status not in ('completed', 'rejected', 'cancelled') then
+    raise exception 'Invalid status';
+  end if;
+
+  select * into wd from withdrawals where id = p_withdrawal_id for update;
+  if not found then
+    raise exception 'Withdrawal not found';
+  end if;
+  if p_user_id is not null and wd.user_id <> p_user_id then
+    raise exception 'Withdrawal not found';
+  end if;
+  if wd.status <> 'pending' then
+    return query select false, false;
+    return;
+  end if;
+
+  update withdrawals set status = p_status, admin_notes = coalesce(p_admin_notes, admin_notes), updated_at = now()
+    where id = p_withdrawal_id;
+
+  if p_status in ('rejected', 'cancelled') then
+    update users set balance = balance + wd.amount, updated_at = now() where id = wd.user_id;
+    insert into transactions(user_id, amount, type, description)
+    values (wd.user_id, wd.amount, 'withdrawal_refund', 'Withdrawal ' || p_status || ' – balance refunded');
+    return query select true, true;
+    return;
+  end if;
+
+  return query select true, false;
 end;
 $$;
 

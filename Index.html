@@ -618,6 +618,8 @@
         }
         .game-card:active { transform: scale(0.96); }
         .game-card.keno-card { border-color: #6366f1; }
+        .game-card.fastkeno-card { border-color: #a855f7; }
+        .game-card.dice-card { border-color: #14b8a6; }
         .game-card.hl-card { border-color: #10b981; }
         .game-card.aviator-card { border-color: #ef4444; }
         .game-card.raffle-card { border-color: var(--accent); }
@@ -677,6 +679,71 @@
         .keno-payout-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--border); }
         .keno-payout-row:last-child { border-bottom: none; }
         .keno-payout-row span:last-child { color: var(--accent); font-weight: 700; }
+
+        /* ===== FAST KENO ===== */
+        .fastkeno-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+        .fastkeno-screen.active { display: flex; }
+        .fk-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+        .fk-round-card {
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+            border: 1px solid rgba(99,102,241,0.35); border-radius: 14px; padding: 14px; text-align: center;
+        }
+        .fk-phase { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: #a5b4fc; }
+        .fk-phase[data-phase="drawing"] { color: var(--accent); }
+        .fk-phase[data-phase="result"] { color: #10b981; }
+        .fk-timer { font-size: 40px; font-weight: 900; line-height: 1.1; font-family: 'Courier New', monospace; color: #fff; }
+        .fk-round-id { font-size: 10px; color: var(--text2); }
+        .fk-progress { height: 5px; border-radius: 3px; background: rgba(148,163,184,0.25); margin-top: 10px; overflow: hidden; }
+        .fk-progress > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6366f1, #a5b4fc); transition: width 0.25s linear; }
+        .fk-drawn-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 10px; min-height: 30px; }
+        .fk-drawn-ball {
+            width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 800; background: rgba(245,158,11,0.18); color: var(--accent);
+            border: 1px solid rgba(245,158,11,0.5); animation: fk-pop 0.3s ease-out;
+        }
+        .fk-drawn-ball.hit { background: #10b981; border-color: #10b981; color: #fff; }
+        @keyframes fk-pop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .fk-actions { display: flex; gap: 6px; }
+        .fk-actions button {
+            flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--border); background: var(--card2);
+            color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .fk-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .fk-ticket { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 11px; color: var(--text2); }
+        .fk-ticket strong { color: var(--text); }
+        .fk-banner { border-radius: 12px; padding: 12px; text-align: center; display: none; }
+        .fk-banner.show { display: block; }
+        .fk-banner.win { background: rgba(16,185,129,0.15); border: 1px solid #10b981; }
+        .fk-banner.loss { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+        .fk-banner .fb-title { font-size: 17px; font-weight: 900; }
+        .fk-banner.win .fb-title { color: #10b981; }
+        .fk-banner.loss .fb-title { color: #ef4444; }
+        .fk-banner .fb-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+        .fk-offline { display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; border-radius: 10px; padding: 10px; font-size: 12px; text-align: center; }
+        .fk-offline.show { display: block; }
+        .fk-await { font-size: 11px; color: var(--text2); }
+
+        /* ===== DICE ===== */
+        .dice-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+        .dice-screen.active { display: flex; }
+        .dice-body { flex: 1 1 auto; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .dice-display {
+            background: linear-gradient(135deg, #052e2b 0%, #0f172a 100%); border: 1px solid rgba(16,185,129,0.3);
+            border-radius: 16px; padding: 22px 16px; text-align: center;
+        }
+        .dice-roll { font-size: 52px; font-weight: 900; font-family: 'Courier New', monospace; color: #10b981; line-height: 1; }
+        .dice-roll.win { color: #10b981; }
+        .dice-roll.loss { color: #ef4444; }
+        .dice-sub { font-size: 12px; color: var(--text2); margin-top: 6px; min-height: 18px; }
+        .dice-dir-row { display: flex; gap: 10px; }
+        .dice-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .dice-dir {
+            flex: 1; padding: 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--card2);
+            color: var(--text2); font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .dice-dir.active { border-color: #10b981; color: #10b981; background: rgba(16,185,129,0.12); }
+        .dice-stats { display: flex; gap: 8px; }
+        .dice-slider { width: 100%; accent-color: #10b981; cursor: pointer; }
 
         /* ===== HIGHER/LOWER GAME ===== */
         .hl-screen { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
@@ -941,6 +1008,15 @@
                 <button class="btn-draw" onclick="showTab('draw')">🎲 Draw</button>
                 <button class="btn-reset" onclick="resetDraw()">🔄 Reset</button>
             </div>
+
+            <!-- MANUAL MONEY REVIEW QUEUE (admin only; every action is re-checked server-side) -->
+            <div class="admin-panel-title" style="margin-top:14px;">💵 Manual Money Requests</div>
+            <div class="bet-quick-row" id="adminQueueFilters" role="group" aria-label="Filter money requests">
+                <button class="bet-quick active" data-queue="deposits" onclick="setAdminQueue('deposits')">Deposits</button>
+                <button class="bet-quick" data-queue="withdrawals" onclick="setAdminQueue('withdrawals')">Withdrawals</button>
+                <button class="bet-quick" onclick="loadAdminQueue()">↻ Refresh</button>
+            </div>
+            <div id="adminQueueList"><div class="tx-empty">Open the panel to load pending requests</div></div>
         </div>
 
         <!-- HOME SCREEN -->
@@ -987,20 +1063,12 @@
 
                 <div class="payment-section">
                     <div class="section-title"><div class="dot"></div> Payment</div>
-                    <div class="pay-card">
-                        <div class="icon">📱</div>
-                        <div class="info"><div class="name">Telebirr</div><div class="detail">0936 719 379</div></div>
-                        <button class="copy" onclick="copyText('0936719379', this)">Copy</button>
-                    </div>
-                    <div class="pay-card">
-                        <div class="icon">🏦</div>
-                        <div class="info"><div class="name">Dashen Bank</div><div class="detail">5236 2713 5901 1</div></div>
-                        <button class="copy" onclick="copyText('5236271359011', this)">Copy</button>
-                    </div>
-                    <div class="pay-card">
-                        <div class="icon">👤</div>
-                        <div class="info"><div class="name">Name</div><div class="detail">Alazar Sisay</div></div>
-                        <button class="copy" onclick="copyText('Alazar Sisay', this)">Copy</button>
+                    <!-- Populated from the server-side payment destination configuration. -->
+                    <div id="rafflePaymentCards">
+                        <div class="pay-card">
+                            <div class="icon">💳</div>
+                            <div class="info"><div class="name">Loading payment accounts…</div><div class="detail">Please wait</div></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1115,24 +1183,35 @@
                         Low balance! <a onclick="showDepositModal()">Deposit ETB →</a>
                     </div>
                     <div class="game-cards">
-                        <div class="game-card keno-card" onclick="showTab('keno')">
+                        <div class="game-card fastkeno-card" role="button" tabindex="0" aria-label="Play Fast Keno" onclick="showTab('fast_keno')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('fast_keno');}">
+                            <div class="gicon">⚡</div>
+                            <div class="gname">Fast Keno</div>
+                            <div class="gdesc">Live round every ~30s</div>
+                            <div class="gbadge">NEW</div>
+                        </div>
+                        <div class="game-card keno-card" role="button" tabindex="0" aria-label="Play Keno" onclick="showTab('keno')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('keno');}">
                             <div class="gicon">🔢</div>
                             <div class="gname">Keno</div>
-                            <div class="gdesc">Pick numbers • up to 256x</div>
+                            <div class="gdesc">Pick numbers • instant draw</div>
                             <div class="gbadge green">HOT</div>
                         </div>
-                        <div class="game-card hl-card" onclick="showTab('higher_lower')">
+                        <div class="game-card hl-card" role="button" tabindex="0" aria-label="Play Higher or Lower" onclick="showTab('higher_lower')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('higher_lower');}">
                             <div class="gicon">🃏</div>
                             <div class="gname">Higher / Lower</div>
                             <div class="gdesc">Guess the next card</div>
                         </div>
-                        <div class="game-card aviator-card" onclick="showTab('aviator')">
+                        <div class="game-card aviator-card" role="button" tabindex="0" aria-label="Play Aviator" onclick="showTab('aviator')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('aviator');}">
                             <div class="gicon">✈️</div>
                             <div class="gname">Aviator</div>
                             <div class="gdesc">Crash game • cash out!</div>
                             <div class="gbadge">LIVE</div>
                         </div>
-                        <div class="game-card raffle-card" onclick="showTab('home')">
+                        <div class="game-card dice-card" role="button" tabindex="0" aria-label="Play Dice" onclick="showTab('dice')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('dice');}">
+                            <div class="gicon">🎲</div>
+                            <div class="gname">Dice</div>
+                            <div class="gdesc">Roll under or over</div>
+                        </div>
+                        <div class="game-card raffle-card" role="button" tabindex="0" aria-label="Buy raffle tickets" onclick="showTab('home')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTab('home');}">
                             <div class="gicon">🎫</div>
                             <div class="gname">Raffle</div>
                             <div class="gdesc">Buy tickets • 3 winners</div>
@@ -1143,6 +1222,130 @@
                     <!-- Recent wins ticker -->
                     <div class="section-title"><div class="dot"></div> Recent Wins</div>
                     <div id="recentWinsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FAST KENO SCREEN -->
+        <div class="fastkeno-screen" id="screenFastKeno">
+            <div class="game-header">
+                <button class="game-back" onclick="showTab('games')" aria-label="Back to games lobby">← Back</button>
+                <div class="game-title">⚡ Fast Keno</div>
+                <div class="game-balance-pill" id="fkBalancePill" aria-live="polite">0 ETB</div>
+            </div>
+            <div class="fk-body">
+                <div class="fk-offline" id="fkOffline" role="alert">Connection lost — reconnecting to the live round…</div>
+
+                <div class="fk-round-card">
+                    <div class="fk-phase" id="fkPhase">Betting open</div>
+                    <div class="fk-timer" id="fkTimer" aria-live="polite">--</div>
+                    <div class="fk-round-id" id="fkRoundId">Round —</div>
+                    <div class="fk-progress"><span id="fkProgressBar"></span></div>
+                    <div class="fk-drawn-row" id="fkDrawnRow"></div>
+                </div>
+
+                <div class="fk-banner" id="fkBanner" role="status">
+                    <div class="fb-title" id="fkBannerTitle"></div>
+                    <div class="fb-sub" id="fkBannerSub"></div>
+                </div>
+
+                <div class="keno-info">
+                    <div class="keno-stat"><div class="ks-val" id="fkPickedCount">0</div><div class="ks-lbl">Picked</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="fkHits">-</div><div class="ks-lbl">Hits</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="fkMultiplier">-</div><div class="ks-lbl">Multi</div></div>
+                    <div class="keno-stat"><div class="ks-val" id="fkPayout" style="color:#10b981">-</div><div class="ks-lbl">Win</div></div>
+                </div>
+
+                <div>
+                    <div class="section-title" style="margin-bottom:8px;"><div class="dot" style="background:#a855f7"></div> <span id="fkPickHint">Pick 1–8 numbers (from 1–40)</span></div>
+                    <div class="keno-grid" id="fkGrid" role="group" aria-label="Fast Keno number picker"></div>
+                </div>
+
+                <div class="fk-actions">
+                    <button id="fkQuickPickBtn" onclick="fastKenoQuickPick()">🎲 Quick Pick</button>
+                    <button id="fkClearBtn" onclick="fastKenoClear()">✖ Clear</button>
+                </div>
+
+                <div class="fk-ticket" id="fkTicket">No ticket for this round yet.</div>
+
+                <div class="bet-form">
+                    <div>
+                        <label class="dep-label" for="fkBetInput">Stake (ETB)</label>
+                        <div class="keno-bet-row">
+                            <input type="number" class="keno-bet-input" id="fkBetInput" value="10" min="5" max="500" step="1" inputmode="numeric" placeholder="ETB">
+                        </div>
+                    </div>
+                    <div class="bet-quick-row">
+                        <button class="bet-quick" onclick="setFastKenoBet(5)">5</button>
+                        <button class="bet-quick" onclick="setFastKenoBet(10)">10</button>
+                        <button class="bet-quick" onclick="setFastKenoBet(25)">25</button>
+                        <button class="bet-quick" onclick="setFastKenoBet(50)">50</button>
+                        <button class="bet-quick" onclick="setFastKenoBet(100)">100</button>
+                    </div>
+                    <button class="keno-play-btn" id="fkPlayBtn" onclick="placeFastKenoBet()">⚡ Place Bet</button>
+                </div>
+
+                <div class="keno-payout-table">
+                    <div class="pt-title">Payout Table (<span id="fkPayoutPicks">3</span> picks)</div>
+                    <div id="fkPayoutRows"><div class="keno-payout-row"><span>Loading…</span><span>—</span></div></div>
+                </div>
+
+                <div class="keno-payout-table">
+                    <div class="pt-title">Your Recent Rounds</div>
+                    <div id="fkHistoryList"><div class="keno-payout-row"><span>No rounds played yet</span><span>—</span></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DICE SCREEN -->
+        <div class="dice-screen" id="screenDice">
+            <div class="game-header">
+                <button class="game-back" onclick="showTab('games')" aria-label="Back to games lobby">← Back</button>
+                <div class="game-title">🎲 Dice</div>
+                <div class="game-balance-pill" id="diceBalancePill" aria-live="polite">0 ETB</div>
+            </div>
+            <div class="dice-body">
+                <div class="dice-display">
+                    <div class="dice-roll" id="diceRoll">--</div>
+                    <div class="dice-sub" id="diceStatus">Choose a target and roll.</div>
+                </div>
+
+                <div class="dice-dir-row">
+                    <button class="dice-dir active" id="diceDirUnder" onclick="setDiceDirection('under')" aria-pressed="true">📉 Roll Under</button>
+                    <button class="dice-dir" id="diceDirOver" onclick="setDiceDirection('over')" aria-pressed="false">📈 Roll Over</button>
+                </div>
+
+                <div class="cashout-slider-wrap">
+                    <div class="cashout-slider-label">
+                        <span>Target</span>
+                        <span id="diceTargetLabel">50</span>
+                    </div>
+                    <input type="range" class="dice-slider" id="diceTargetSlider" min="2" max="99" step="1" value="50"
+                           aria-label="Dice target number" oninput="updateDiceTarget(this.value)">
+                    <div class="dice-stats" style="margin-top:10px;">
+                        <div class="keno-stat"><div class="ks-val" id="diceChance">49%</div><div class="ks-lbl">Win chance</div></div>
+                        <div class="keno-stat"><div class="ks-val" id="diceMultiplier">1.94x</div><div class="ks-lbl">Payout</div></div>
+                    </div>
+                </div>
+
+                <div class="bet-form">
+                    <div>
+                        <label class="dep-label" for="diceBetInput">Stake (ETB)</label>
+                        <input type="number" class="dep-input" id="diceBetInput" value="10" min="5" max="500" step="1" inputmode="numeric" placeholder="ETB">
+                    </div>
+                    <div class="bet-quick-row">
+                        <button class="bet-quick" onclick="setDiceBet(5)">5</button>
+                        <button class="bet-quick" onclick="setDiceBet(10)">10</button>
+                        <button class="bet-quick" onclick="setDiceBet(25)">25</button>
+                        <button class="bet-quick" onclick="setDiceBet(50)">50</button>
+                        <button class="bet-quick" onclick="setDiceBet(100)">100</button>
+                    </div>
+                    <button class="keno-play-btn" id="dicePlayBtn" style="background:linear-gradient(135deg,#10b981,#34d399)" onclick="playDice()">🎲 Roll Dice</button>
+                </div>
+
+                <div class="keno-payout-table">
+                    <div class="pt-title">Recent Rolls</div>
+                    <div class="avi-history-pills" id="diceHistoryPills"></div>
                 </div>
             </div>
         </div>
@@ -1316,9 +1519,10 @@
         <div class="wallet-screen" id="screenWallet">
             <div class="wallet-body">
                 <div class="wallet-balance-card">
-                    <div class="wb-label">Your Balance</div>
+                    <div class="wb-label">Available Balance</div>
                     <div class="wb-amount" id="walletBalanceAmount">0</div>
                     <div class="wb-currency">Ethiopian Birr (ETB)</div>
+                    <div class="wb-pending" id="walletPending" style="display:none;font-size:11px;color:var(--text2);margin-top:8px;"></div>
                     <div class="wb-actions">
                         <button class="wb-btn wb-btn-dep" onclick="showDepositModal()">💳 Deposit</button>
                         <button class="wb-btn wb-btn-wd" onclick="showWithdrawModal()">💸 Withdraw</button>
@@ -1326,8 +1530,25 @@
                 </div>
 
                 <div class="tx-section">
+                    <div class="tx-section-title">Deposit &amp; Withdrawal Requests</div>
+                    <div class="bet-quick-row" id="reqFilters" role="group" aria-label="Filter requests">
+                        <button class="bet-quick active" data-req-filter="deposits" onclick="setRequestFilter('deposits')">Deposits</button>
+                        <button class="bet-quick" data-req-filter="withdrawals" onclick="setRequestFilter('withdrawals')">Withdrawals</button>
+                    </div>
+                    <div id="requestList"><div class="tx-empty">Loading...</div></div>
+                    <button class="dep-cancel-btn" id="reqMoreBtn" style="display:none;" onclick="loadRequests(requestPage + 1)">Load more</button>
+                </div>
+
+                <div class="tx-section">
                     <div class="tx-section-title">Transaction History</div>
+                    <div class="bet-quick-row" id="txFilters" role="group" aria-label="Filter transactions">
+                        <button class="bet-quick active" data-filter="all" onclick="setTxFilter('all')">All</button>
+                        <button class="bet-quick" data-filter="deposits" onclick="setTxFilter('deposits')">Deposits</button>
+                        <button class="bet-quick" data-filter="withdrawals" onclick="setTxFilter('withdrawals')">Withdrawals</button>
+                        <button class="bet-quick" data-filter="games" onclick="setTxFilter('games')">Games</button>
+                    </div>
                     <div id="txList"><div class="tx-empty">Loading...</div></div>
+                    <button class="dep-cancel-btn" id="txMoreBtn" style="display:none;" onclick="loadTransactions(txPage + 1)">Load more</button>
                 </div>
             </div>
         </div>
@@ -1354,46 +1575,45 @@
 
                 <!-- Manual tab -->
                 <div id="depFormManual" class="dep-form" style="display:none;">
-                    <div class="section-title" style="margin:0 0 6px;"><div class="dot"></div> Send to any of these accounts:</div>
-                    <div class="manual-info-card">
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">📱 Telebirr</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="telebirrNum">0936719379</div></div>
-                            <button class="mir-copy" onclick="copyManual('0936719379', this)">Copy</button>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">🏦 Dashen Bank</div><div style="font-size:12px;font-weight:700;font-family:monospace;">5236271359011</div></div>
-                            <button class="mir-copy" onclick="copyManual('5236271359011', this)">Copy</button>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">🏦 CBE</div><div style="font-size:12px;font-weight:700;font-family:monospace;" id="cbeNum">Not available</div></div>
-                            <span style="font-size:10px;color:var(--text2);">—</span>
-                        </div>
-                        <div class="manual-info-row">
-                            <div><div class="mir-label">👤 Name</div><div style="font-size:12px;font-weight:700;">Alazar Sisay</div></div>
-                            <button class="mir-copy" onclick="copyManual('Alazar Sisay', this)">Copy</button>
-                        </div>
+                    <div class="section-title" style="margin:0 0 6px;"><div class="dot"></div> Send the money to one of these accounts:</div>
+                    <div class="manual-info-card" id="manualDestinations">
+                        <div class="manual-info-row"><div class="mir-label">Loading payment accounts…</div></div>
+                    </div>
+                    <div id="manualDepositNotice" style="font-size:11px;color:var(--text2);line-height:1.5;">
+                        Transfer the money yourself, then submit your receipt here. Proof is checked manually by an
+                        operator — submitting it does not credit your wallet and does not guarantee approval.
                     </div>
                     <div>
-                        <label class="dep-label">Amount Sent (ETB)</label>
-                        <input type="number" class="dep-input" id="manualAmountInput" min="10" placeholder="e.g. 100">
+                        <label class="dep-label" for="manualAmountInput">Amount Sent (ETB)</label>
+                        <input type="number" class="dep-input" id="manualAmountInput" min="10" step="0.01" placeholder="e.g. 100">
                     </div>
                     <div>
-                        <label class="dep-label">Payment Method</label>
-                        <div class="dep-method-grid">
-                            <button class="dep-method-btn active" id="manMethTelebirr" onclick="selectManualMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
-                            <button class="dep-method-btn" id="manMethDashen" onclick="selectManualMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
-                            <button class="dep-method-btn" id="manMethCBE" onclick="selectManualMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
-                        </div>
+                        <label class="dep-label" for="manualDestinationSelect">Where did you send it?</label>
+                        <select class="dep-input" id="manualDestinationSelect"></select>
                     </div>
                     <div>
-                        <label class="dep-label">Upload Payment Receipt</label>
+                        <label class="dep-label" for="manualSenderRef">Your phone / account used to send</label>
+                        <input type="text" class="dep-input" id="manualSenderRef" inputmode="tel" placeholder="e.g. 0912345678">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="manualExternalRef">Transaction / reference ID (optional)</label>
+                        <input type="text" class="dep-input" id="manualExternalRef" placeholder="e.g. CH1234ABCD">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="manualNote">Note (optional)</label>
+                        <input type="text" class="dep-input" id="manualNote" maxlength="300" placeholder="Anything the reviewer should know">
+                    </div>
+                    <div>
+                        <label class="dep-label">Upload Payment Receipt (JPG, PNG or WebP · max 6 MB)</label>
                         <div class="screenshot-zone" id="depScreenshotZone" onclick="document.getElementById('depFileInput').click()">
                             <div class="sz-icon" id="depZoneIcon">📤</div>
                             <div class="sz-text" id="depZoneText">Tap to upload screenshot</div>
                         </div>
-                        <input type="file" id="depFileInput" accept="image/*" style="display:none;" onchange="handleDepFile(event)">
+                        <img id="depProofPreview" alt="Selected receipt preview" style="display:none;width:100%;max-height:180px;object-fit:contain;border-radius:10px;margin-top:8px;">
+                        <input type="file" id="depFileInput" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="handleDepFile(event)">
                     </div>
-                    <button class="dep-submit-btn" id="manualDepBtn" onclick="submitManualDeposit()">📨 Submit for Review</button>
+                    <div id="manualDepStatus" style="display:none;font-size:12px;color:var(--text2);text-align:center;"></div>
+                    <button class="dep-submit-btn" id="manualDepBtn" onclick="submitManualDeposit()">📨 Submit Proof for Review</button>
                     <button class="dep-cancel-btn" onclick="closeDepositModal()">Cancel</button>
                 </div>
             </div>
@@ -1404,29 +1624,37 @@
             <div class="wd-modal">
                 <h3>💸 Withdraw Funds</h3>
                 <div class="dep-form" id="wdForm">
-                    <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px;font-size:12px;color:var(--accent);">
-                        Minimum withdrawal: 50 ETB • Processed within 24 hours
+                    <div id="wdLimitsNote" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px;font-size:12px;color:var(--accent);">
+                        Minimum withdrawal: 50 ETB • Paid out manually after review
                     </div>
                     <div>
-                        <label class="dep-label">Amount (ETB)</label>
-                        <input type="number" class="dep-input" id="wdAmountInput" min="50" placeholder="e.g. 100">
+                        <label class="dep-label" for="wdAmountInput">Amount (ETB)</label>
+                        <input type="number" class="dep-input" id="wdAmountInput" min="50" step="0.01" placeholder="e.g. 100">
                     </div>
                     <div>
-                        <label class="dep-label">Payment Method</label>
+                        <label class="dep-label">Send my payout to</label>
                         <div class="dep-method-grid">
                             <button class="dep-method-btn active" id="wdMethTelebirr" onclick="selectWdMethod('telebirr')"><span class="dm-icon">📱</span>Telebirr</button>
-                            <button class="dep-method-btn" id="wdMethDashen" onclick="selectWdMethod('dashen')"><span class="dm-icon">🏦</span>Dashen</button>
-                            <button class="dep-method-btn" id="wdMethCBE" onclick="selectWdMethod('cbe')"><span class="dm-icon">🏦</span>CBE</button>
+                            <button class="dep-method-btn" id="wdMethBank" onclick="selectWdMethod('bank')"><span class="dm-icon">🏦</span>Bank</button>
                         </div>
                     </div>
-                    <div>
-                        <label class="dep-label">Your Account Number</label>
-                        <input type="text" class="dep-input" id="wdAccountNum" placeholder="e.g. 0911234567">
+                    <div id="wdBankRow" style="display:none;">
+                        <label class="dep-label" for="wdBankName">Bank</label>
+                        <input type="text" class="dep-input" id="wdBankName" maxlength="60" placeholder="e.g. Commercial Bank of Ethiopia">
                     </div>
                     <div>
-                        <label class="dep-label">Account Holder Name</label>
-                        <input type="text" class="dep-input" id="wdAccountName" placeholder="e.g. Abebe Kebede">
+                        <label class="dep-label" for="wdAccountNum">Your <span id="wdAccountLabel">Telebirr number</span></label>
+                        <input type="text" class="dep-input" id="wdAccountNum" inputmode="tel" placeholder="e.g. 0912345678">
                     </div>
+                    <div>
+                        <label class="dep-label" for="wdAccountName">Account Holder Name</label>
+                        <input type="text" class="dep-input" id="wdAccountName" maxlength="80" placeholder="e.g. Abebe Kebede">
+                    </div>
+                    <div>
+                        <label class="dep-label" for="wdNote">Note (optional)</label>
+                        <input type="text" class="dep-input" id="wdNote" maxlength="300" placeholder="Anything the operator should know">
+                    </div>
+                    <div id="wdStatus" style="display:none;font-size:12px;color:var(--text2);text-align:center;"></div>
                     <button class="dep-submit-btn" id="wdSubmitBtn" onclick="submitWithdrawal()">💸 Request Withdrawal</button>
                     <button class="dep-cancel-btn" onclick="closeWithdrawModal()">Cancel</button>
                 </div>
@@ -1663,11 +1891,15 @@
             currentUser = user;
             localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
             localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+            // Payment destinations are server configuration, so they are fetched
+            // once a session exists rather than being baked into the page.
+            if (typeof loadPaymentConfig === 'function') loadPaymentConfig(true);
         }
 
         function clearAuthSession() {
             AUTH_TOKEN = null;
             currentUser = null;
+            walletConfigLoaded = false;
             localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
             localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
         }
@@ -1891,15 +2123,13 @@
             // Show user info in header
             const name = currentUser.fullName || currentUser.email || 'Player';
             document.getElementById('headerUserName').textContent = name.split(' ')[0];
-            document.getElementById('headerUserBalance').textContent = (currentUser.balance || 0).toLocaleString() + ' ETB';
             document.getElementById('userInfoBar').classList.add('show');
             // Update admin state from server
             isAdmin = currentUser.isAdmin === true;
             updateAdminToggleVisibility();
             checkSendReady();
-            updateGameBalancePills();
-            // Set wallet balance display
-            document.getElementById('walletBalanceAmount').textContent = (currentUser.balance || 0).toLocaleString();
+            applyBalance(currentUser.balance || 0);
+            checkDepositReturn();
         }
 
         function updateAdminToggleVisibility() {
@@ -2269,7 +2499,11 @@
         }
 
         function showPaymentInfo() {
-            showToast('📱 Telebirr: 0936719379 | 🏦 Dashen: 5236271359011');
+            const dests = (typeof walletConfig !== 'undefined' && walletConfig.destinations) ? walletConfig.destinations : [];
+            const summary = dests.length
+                ? dests.map(d => (d.type === 'telebirr' ? '📱 ' : '🏦 ') + d.bank_name + ': ' + d.account_number).join(' | ')
+                : 'Payment accounts are loading. Please open the wallet and try again.';
+            showToast(summary);
             closeModal();
         }
 
@@ -2322,7 +2556,7 @@
             btn.classList.toggle('active');
             panel.classList.toggle('active');
             btn.textContent = panel.classList.contains('active') ? '🔒 Admin' : '👤 Admin';
-            if (panel.classList.contains('active')) updateAdminPanel();
+            if (panel.classList.contains('active')) { updateAdminPanel(); loadAdminQueue(); }
         }
 
         function copyText(text, el) {
@@ -2429,16 +2663,18 @@
 
         function showTab(tab) {
             // Hide all screens
-            document.querySelectorAll('.screen, .draw-screen, .winners-screen, .rules-screen, .games-screen, .keno-screen, .hl-screen, .aviator-screen, .wallet-screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.screen, .draw-screen, .winners-screen, .rules-screen, .games-screen, .keno-screen, .fastkeno-screen, .dice-screen, .hl-screen, .aviator-screen, .wallet-screen').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
             const navMap = {
                 home: 'navHome', games: 'navGames', keno: 'navGames', higher_lower: 'navGames',
-                aviator: 'navGames', wallet: 'navWallet', draw: 'navDraw', winners: 'navDraw', rules: 'navRules'
+                aviator: 'navGames', fast_keno: 'navGames', dice: 'navGames',
+                wallet: 'navWallet', draw: 'navDraw', winners: 'navDraw', rules: 'navRules'
             };
             const screenMap = {
                 home: 'screenHome', games: 'screenGames', keno: 'screenKeno', higher_lower: 'screenHL',
-                aviator: 'screenAviator', wallet: 'screenWallet', draw: 'screenDraw',
+                aviator: 'screenAviator', fast_keno: 'screenFastKeno', dice: 'screenDice',
+                wallet: 'screenWallet', draw: 'screenDraw',
                 winners: 'screenWinners', rules: 'screenRules'
             };
 
@@ -2448,12 +2684,17 @@
             if (navEl) navEl.classList.add('active');
             playSound('tap');
 
+            // Only the live game needs a polling loop; stop it everywhere else.
+            if (tab !== 'fast_keno') stopFastKeno();
+
             // Tab-specific init
             if (tab === 'wallet') loadWallet();
             if (tab === 'games') updateGameBalancePills();
             if (tab === 'keno') { updateGameBalancePills(); initKenoGrid(); }
             if (tab === 'higher_lower') { updateGameBalancePills(); initHLCard(); }
             if (tab === 'aviator') updateGameBalancePills();
+            if (tab === 'fast_keno') { updateGameBalancePills(); startFastKeno(); }
+            if (tab === 'dice') { updateGameBalancePills(); loadDiceConfig(); updateDiceTarget(document.getElementById('diceTargetSlider').value); }
         }
 
         function startDraw() {
@@ -2621,10 +2862,15 @@
 }
 
         // ===== GAME BALANCE HELPERS =====
+        function formatEtb(value) {
+            const num = Number(value) || 0;
+            return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        }
+
         function updateGameBalancePills() {
             const bal = currentUser ? (currentUser.balance || 0) : 0;
-            const fmt = bal.toLocaleString() + ' ETB';
-            ['kenoBalancePill','hlBalancePill','aviBalancePill'].forEach(id => {
+            const fmt = formatEtb(bal) + ' ETB';
+            ['kenoBalancePill','hlBalancePill','aviBalancePill','fkBalancePill','diceBalancePill'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = fmt;
             });
@@ -2632,17 +2878,25 @@
             if (lbWarn) lbWarn.classList.toggle('show', bal < 10 && !!currentUser);
         }
 
+        // Single place where a server-reported balance is applied, so every
+        // game screen, the header and the wallet stay in sync without a reload.
+        function applyBalance(balance) {
+            if (balance === null || balance === undefined || !Number.isFinite(Number(balance))) return;
+            const value = Number(balance);
+            if (currentUser) currentUser.balance = value;
+            const header = document.getElementById('headerUserBalance');
+            if (header) header.textContent = formatEtb(value) + ' ETB';
+            const wallet = document.getElementById('walletBalanceAmount');
+            if (wallet) wallet.textContent = formatEtb(value);
+            updateGameBalancePills();
+        }
+
         async function refreshBalance() {
             if (!AUTH_TOKEN) return;
             try {
                 const resp = await fetch('/api/balance', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
                 const data = await readJsonResponse(resp, 'Balance');
-                if (resp.ok && data && data.ok) {
-                    if (currentUser) currentUser.balance = data.balance;
-                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
-                    document.getElementById('walletBalanceAmount').textContent = data.balance.toLocaleString();
-                    updateGameBalancePills();
-                }
+                if (resp.ok && data && data.ok) applyBalance(data.balance);
             } catch (_e) { /* silent */ }
         }
 
@@ -2770,10 +3024,478 @@
                 document.getElementById('kenoResultSub').textContent = res.hits + ' hits · Better luck next time!';
                 playSound('error');
             }
-            if (newBalance !== null && newBalance !== undefined) {
-                if (currentUser) currentUser.balance = newBalance;
-                document.getElementById('headerUserBalance').textContent = newBalance.toLocaleString() + ' ETB';
-                updateGameBalancePills();
+            applyBalance(newBalance);
+        }
+
+        // ===== FAST KENO (server-authoritative live rounds) =====
+        const FK_POLL_MS = 1500;
+        let fkConfig = null;
+        let fkPicks = [];
+        let fkState = null;
+        let fkClockSkew = 0;         // serverTime - clientTime
+        let fkPollTimer = null;
+        let fkTickTimer = null;
+        let fkGridBuilt = false;
+        let fkBetInFlight = false;
+        let fkRenderedDrawFor = null;
+        let fkLastSettledBetId = null;
+
+        function fkNow() { return Date.now() + fkClockSkew; }
+
+        function initFastKenoGrid(pool) {
+            const grid = document.getElementById('fkGrid');
+            if (!grid || fkGridBuilt) return;
+            grid.innerHTML = '';
+            for (let i = 1; i <= pool; i++) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'keno-ball';
+                b.id = 'fkb-' + i;
+                b.textContent = i;
+                b.setAttribute('aria-pressed', 'false');
+                b.setAttribute('aria-label', 'Number ' + i);
+                b.onclick = () => toggleFastKenoNumber(i);
+                grid.appendChild(b);
+            }
+            fkGridBuilt = true;
+        }
+
+        function toggleFastKenoNumber(n) {
+            if (!fkCanBet()) { showToast('⏳ Betting is closed for this round'); return; }
+            const idx = fkPicks.indexOf(n);
+            if (idx >= 0) fkPicks.splice(idx, 1);
+            else {
+                const max = (fkConfig && fkConfig.max_picks) || 8;
+                if (fkPicks.length >= max) { showToast('Maximum ' + max + ' numbers'); return; }
+                fkPicks.push(n);
+            }
+            playSound('tap');
+            renderFastKenoPicks();
+        }
+
+        function fastKenoQuickPick() {
+            if (!fkCanBet()) { showToast('⏳ Betting is closed for this round'); return; }
+            const pool = (fkConfig && fkConfig.pool) || 40;
+            const max = (fkConfig && fkConfig.max_picks) || 8;
+            const count = fkPicks.length > 0 ? fkPicks.length : 4;
+            const bag = [];
+            for (let i = 1; i <= pool; i++) bag.push(i);
+            // Display-only shuffle. The outcome that decides money is drawn by
+            // the server with a cryptographic RNG.
+            for (let i = bag.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [bag[i], bag[j]] = [bag[j], bag[i]];
+            }
+            fkPicks = bag.slice(0, Math.min(count, max));
+            playSound('tap');
+            renderFastKenoPicks();
+        }
+
+        function fastKenoClear() {
+            if (!fkCanBet()) { showToast('⏳ Betting is closed for this round'); return; }
+            fkPicks = [];
+            renderFastKenoPicks();
+        }
+
+        function setFastKenoBet(v) {
+            const input = document.getElementById('fkBetInput');
+            if (input) input.value = v;
+        }
+
+        function fkCanBet() {
+            return !!(fkState && fkState.round && fkState.round.phase === 'betting' && !fkHasBetThisRound());
+        }
+
+        function fkHasBetThisRound() {
+            return !!(fkState && fkState.bet && fkState.round && fkState.bet.round_index === fkState.round.index);
+        }
+
+        function renderFastKenoPicks() {
+            const pool = (fkConfig && fkConfig.pool) || 40;
+            const drawn = (fkState && fkState.round && fkState.round.drawn) || [];
+            for (let i = 1; i <= pool; i++) {
+                const el = document.getElementById('fkb-' + i);
+                if (!el) continue;
+                const selected = fkPicks.indexOf(i) >= 0;
+                const hit = selected && drawn.indexOf(i) >= 0;
+                el.classList.toggle('selected', selected && !hit);
+                el.classList.toggle('hit', hit);
+                el.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                el.disabled = !fkCanBet();
+            }
+            const counter = document.getElementById('fkPickedCount');
+            if (counter) counter.textContent = fkPicks.length;
+            renderFastKenoPaytable();
+            const playBtn = document.getElementById('fkPlayBtn');
+            if (playBtn) {
+                const open = fkCanBet();
+                playBtn.disabled = fkBetInFlight || !open || fkPicks.length === 0;
+                playBtn.textContent = fkHasBetThisRound() ? '✅ Bet placed' : (open ? '⚡ Place Bet' : '⏳ Round closed');
+            }
+            ['fkQuickPickBtn', 'fkClearBtn'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !fkCanBet();
+            });
+        }
+
+        function renderFastKenoPaytable() {
+            const host = document.getElementById('fkPayoutRows');
+            if (!host || !fkConfig || !fkConfig.paytables) return;
+            const picks = fkPicks.length > 0 ? fkPicks.length : 3;
+            const table = fkConfig.paytables[picks] || fkConfig.paytables[String(picks)];
+            const label = document.getElementById('fkPayoutPicks');
+            if (label) label.textContent = picks;
+            if (!table) { host.innerHTML = '<div class="keno-payout-row"><span>No table</span><span>—</span></div>'; return; }
+            const rows = [];
+            Object.keys(table).map(Number).sort((a, b) => a - b).forEach(hits => {
+                const mult = Number(table[hits] !== undefined ? table[hits] : table[String(hits)]);
+                if (!mult) return;
+                rows.push('<div class="keno-payout-row"><span>' + hits + ' of ' + picks + '</span><span>' + mult + 'x</span></div>');
+            });
+            host.innerHTML = rows.length ? rows.join('') : '<div class="keno-payout-row"><span>No paying combination</span><span>—</span></div>';
+        }
+
+        function renderFastKenoRound() {
+            if (!fkState || !fkState.round) return;
+            const round = fkState.round;
+            const remaining = Math.max(0, fkPhaseEndsAt() - fkNow());
+            const phaseEl = document.getElementById('fkPhase');
+            const timerEl = document.getElementById('fkTimer');
+            const idEl = document.getElementById('fkRoundId');
+            const bar = document.getElementById('fkProgressBar');
+            const phaseText = round.phase === 'betting' ? 'Betting open'
+                : round.phase === 'drawing' ? 'Drawing…' : 'Results';
+            if (phaseEl) { phaseEl.textContent = phaseText; phaseEl.dataset.phase = round.phase; }
+            if (timerEl) timerEl.textContent = (remaining / 1000).toFixed(1) + 's';
+            if (idEl) idEl.textContent = 'Round ' + round.id;
+            if (bar) {
+                const total = fkPhaseDuration(round.phase);
+                bar.style.width = total ? Math.max(0, Math.min(100, (remaining / total) * 100)) + '%' : '0%';
+            }
+        }
+
+        function fkPhaseDuration(phase) {
+            if (!fkConfig) return 0;
+            if (phase === 'betting') return fkConfig.betting_ms;
+            if (phase === 'drawing') return fkConfig.drawing_ms;
+            return fkConfig.result_ms;
+        }
+
+        function fkPhaseEndsAt() {
+            const r = fkState.round;
+            if (r.phase === 'betting') return r.closes_at;
+            if (r.phase === 'drawing') return r.drawn_at;
+            return r.ends_at;
+        }
+
+        function renderFastKenoDraw() {
+            const host = document.getElementById('fkDrawnRow');
+            if (!host || !fkState || !fkState.round) return;
+            const round = fkState.round;
+            const drawn = round.drawn;
+            if (!drawn) {
+                if (fkRenderedDrawFor !== null) { host.innerHTML = ''; fkRenderedDrawFor = null; }
+                if (!host.innerHTML) {
+                    host.innerHTML = '<div class="fk-await">Numbers appear when the round is drawn</div>';
+                }
+                return;
+            }
+            if (fkRenderedDrawFor === round.id) return;
+            fkRenderedDrawFor = round.id;
+            host.innerHTML = '';
+            drawn.forEach((n, i) => {
+                const b = document.createElement('div');
+                b.className = 'fk-drawn-ball' + (fkPicks.indexOf(n) >= 0 ? ' hit' : '');
+                b.textContent = n;
+                b.style.animationDelay = (i * 90) + 'ms';
+                host.appendChild(b);
+            });
+            playSound('tap');
+            renderFastKenoPicks();
+        }
+
+        function renderFastKenoTicket() {
+            const ticket = document.getElementById('fkTicket');
+            if (!ticket) return;
+            const bet = fkState && fkState.bet;
+            if (!bet) { ticket.textContent = fkState && fkState.round && fkState.round.phase === 'betting' ? 'No ticket for this round yet.' : 'No ticket for this round.'; return; }
+            const stake = (Number(bet.stake_cents) || 0) / 100;
+            const picks = (bet.picks || []).map(Number).join(', ');
+            const tail = bet.status === 'settled'
+                ? ' · ' + (Number(bet.hits) || 0) + ' hits · ' + ((Number(bet.payout_cents) || 0) / 100) + ' ETB'
+                : ' · waiting for the draw';
+            ticket.textContent = '';
+            const ref = document.createElement('strong');
+            ref.textContent = String(bet.round_id || '');
+            ticket.appendChild(ref);
+            ticket.appendChild(document.createTextNode(' · ' + stake + ' ETB on ' + picks + tail));
+        }
+
+        function renderFastKenoResult() {
+            const bet = fkState && fkState.bet;
+            const banner = document.getElementById('fkBanner');
+            const hitsEl = document.getElementById('fkHits');
+            const multEl = document.getElementById('fkMultiplier');
+            const payEl = document.getElementById('fkPayout');
+            if (!bet || bet.status !== 'settled') {
+                if (banner) banner.classList.remove('show', 'win', 'loss');
+                if (hitsEl) hitsEl.textContent = '-';
+                if (multEl) multEl.textContent = '-';
+                if (payEl) payEl.textContent = '-';
+                return;
+            }
+            const payout = (bet.payout_cents || 0) / 100;
+            if (hitsEl) hitsEl.textContent = bet.hits || 0;
+            if (multEl) multEl.textContent = (bet.multiplier || 0) + 'x';
+            if (payEl) payEl.textContent = payout > 0 ? '+' + payout : '0';
+            if (banner) {
+                banner.classList.add('show');
+                banner.classList.toggle('win', payout > 0);
+                banner.classList.toggle('loss', payout <= 0);
+                document.getElementById('fkBannerTitle').textContent = payout > 0 ? '🎉 You won ' + payout + ' ETB!' : '😔 No win this round';
+                document.getElementById('fkBannerSub').textContent = (bet.hits || 0) + ' of ' + (bet.picks || []).length + ' matched · ' + bet.round_id;
+            }
+            if (fkLastSettledBetId !== bet.id) {
+                fkLastSettledBetId = bet.id;
+                if (payout > 0) { playSound('win'); createConfetti(); } else { playSound('error'); }
+            }
+        }
+
+        function renderFastKenoHistory() {
+            const host = document.getElementById('fkHistoryList');
+            if (!host) return;
+            const bets = (fkState && fkState.recent_bets) || [];
+            if (!bets.length) { host.innerHTML = '<div class="keno-payout-row"><span>No rounds played yet</span><span>—</span></div>'; return; }
+            host.textContent = '';
+            bets.slice(0, 8).forEach(b => {
+                const payout = (Number(b.payout_cents) || 0) / 100;
+                const settled = b.status === 'settled';
+                const row = document.createElement('div');
+                row.className = 'keno-payout-row';
+                const left = document.createElement('span');
+                left.textContent = String(b.round_id || '') + ' · ' +
+                    (b.hits === null || b.hits === undefined ? '—' : (Number(b.hits) || 0) + ' hits');
+                const right = document.createElement('span');
+                if (settled) {
+                    right.style.color = payout > 0 ? '#10b981' : 'var(--text2)';
+                    right.textContent = (payout > 0 ? '+' + payout : '-' + (Number(b.stake_cents) || 0) / 100) + ' ETB';
+                } else {
+                    right.textContent = 'pending';
+                }
+                row.appendChild(left);
+                row.appendChild(right);
+                host.appendChild(row);
+            });
+        }
+
+        function renderFastKeno() {
+            renderFastKenoRound();
+            renderFastKenoDraw();
+            renderFastKenoTicket();
+            renderFastKenoResult();
+            renderFastKenoHistory();
+            renderFastKenoPicks();
+        }
+
+        async function pollFastKeno() {
+            try {
+                const headers = AUTH_TOKEN ? { 'Authorization': 'Bearer ' + AUTH_TOKEN } : {};
+                const resp = await fetch('/api/games/fast-keno/state', { headers });
+                const data = await readJsonResponse(resp, 'Fast Keno');
+                if (!resp.ok || !data || !data.ok) throw new Error('bad state');
+                const previousRoundIndex = fkState && fkState.round ? fkState.round.index : null;
+                fkClockSkew = data.round.server_time - Date.now();
+                fkConfig = data.config;
+                fkState = data;
+                initFastKenoGrid(fkConfig.pool);
+                if (previousRoundIndex !== null && data.round.index !== previousRoundIndex && !fkHasBetThisRound()) {
+                    // A fresh round started and nothing is staked on it: keep the
+                    // picks so the player can repeat the ticket in one tap.
+                    fkRenderedDrawFor = null;
+                }
+                const offline = document.getElementById('fkOffline');
+                if (offline) offline.classList.remove('show');
+                renderFastKeno();
+            } catch (_e) {
+                const offline = document.getElementById('fkOffline');
+                if (offline) offline.classList.add('show');
+            }
+        }
+
+        function startFastKeno() {
+            stopFastKeno();
+            pollFastKeno();
+            fkPollTimer = setInterval(pollFastKeno, FK_POLL_MS);
+            fkTickTimer = setInterval(() => { if (fkState) renderFastKenoRound(); }, 100);
+        }
+
+        function stopFastKeno() {
+            if (fkPollTimer) { clearInterval(fkPollTimer); fkPollTimer = null; }
+            if (fkTickTimer) { clearInterval(fkTickTimer); fkTickTimer = null; }
+        }
+
+        async function placeFastKenoBet() {
+            if (!AUTH_TOKEN) { showToast('🔒 Please sign in first'); return; }
+            if (fkBetInFlight) return;
+            if (!fkCanBet()) { showToast('⏳ Betting is closed for this round'); return; }
+            if (fkPicks.length === 0) { showToast('Pick at least one number'); return; }
+            const betAmount = parseInt(document.getElementById('fkBetInput').value, 10);
+            const min = (fkConfig && fkConfig.min_bet) || 5;
+            const max = (fkConfig && fkConfig.max_bet) || 500;
+            if (!Number.isFinite(betAmount) || betAmount < min || betAmount > max) {
+                showToast('Bet must be between ' + min + ' and ' + max + ' ETB');
+                return;
+            }
+            const round = fkState.round;
+            fkBetInFlight = true;
+            renderFastKenoPicks();
+            try {
+                const resp = await fetch('/api/games/fast-keno/bet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN,
+                        // Retrying the same round never places a second wager.
+                        'Idempotency-Key': 'fk-' + round.id + '-' + (currentUser ? currentUser.id : 'me')
+                    },
+                    body: JSON.stringify({ round_id: round.id, picks: fkPicks, bet_amount: betAmount })
+                });
+                const data = await readJsonResponse(resp, 'Fast Keno bet');
+                if (!resp.ok) {
+                    showToast('❌ ' + ((data && data.error) || 'Bet failed'));
+                    await pollFastKeno();
+                    return;
+                }
+                applyBalance(data.balance);
+                showToast(data.replayed ? '✅ Bet already placed for this round' : '✅ Bet placed for ' + round.id);
+                playSound('tap');
+                await pollFastKeno();
+            } catch (_e) {
+                showToast('❌ Network error — check the round before betting again');
+                await pollFastKeno();
+            } finally {
+                fkBetInFlight = false;
+                renderFastKenoPicks();
+            }
+        }
+
+        // ===== DICE (server-authoritative instant game) =====
+        let diceDirection = 'under';
+        let diceRolling = false;
+        let diceHistory = [];
+        // Mirrors the server's configured RTP for the on-screen preview only.
+        // The real multiplier always comes back with the settled bet.
+        let diceConfig = { faces: 100, min_target: 2, max_target: 99, target_rtp: 0.95 };
+        let diceConfigLoaded = false;
+
+        async function loadDiceConfig() {
+            if (diceConfigLoaded) return;
+            try {
+                const resp = await fetch('/api/games/rules');
+                const data = await readJsonResponse(resp, 'Game rules');
+                if (resp.ok && data && data.ok && data.games && data.games.dice) {
+                    diceConfig = data.games.dice;
+                    diceConfigLoaded = true;
+                    const slider = document.getElementById('diceTargetSlider');
+                    if (slider) {
+                        slider.min = diceConfig.min_target;
+                        slider.max = diceConfig.max_target;
+                    }
+                    updateDiceTarget(slider ? slider.value : 50);
+                }
+            } catch (_e) { /* the preview falls back to the defaults */ }
+        }
+
+        function setDiceDirection(dir) {
+            diceDirection = dir === 'over' ? 'over' : 'under';
+            const under = document.getElementById('diceDirUnder');
+            const over = document.getElementById('diceDirOver');
+            if (under) { under.classList.toggle('active', diceDirection === 'under'); under.setAttribute('aria-pressed', String(diceDirection === 'under')); }
+            if (over) { over.classList.toggle('active', diceDirection === 'over'); over.setAttribute('aria-pressed', String(diceDirection === 'over')); }
+            updateDiceTarget(document.getElementById('diceTargetSlider').value);
+        }
+
+        function setDiceBet(v) {
+            const input = document.getElementById('diceBetInput');
+            if (input) input.value = v;
+        }
+
+        function diceTargetFromInput(value) {
+            const parsed = parseInt(value, 10);
+            const fallback = Math.round((diceConfig.min_target + diceConfig.max_target) / 2);
+            return Math.max(diceConfig.min_target, Math.min(diceConfig.max_target, Number.isFinite(parsed) ? parsed : fallback));
+        }
+
+        function updateDiceTarget(value) {
+            const target = diceTargetFromInput(value);
+            const label = document.getElementById('diceTargetLabel');
+            if (label) label.textContent = target;
+            const faces = diceConfig.faces || 100;
+            const wins = diceDirection === 'under' ? target - 1 : faces - target;
+            const chance = document.getElementById('diceChance');
+            const mult = document.getElementById('diceMultiplier');
+            if (chance) chance.textContent = Math.round((wins / faces) * 100) + '%';
+            // Same formula as lib/gameMath.js, for display only.
+            if (mult) mult.textContent = wins > 0
+                ? (Math.round(((diceConfig.target_rtp * faces) / wins) * 100) / 100).toFixed(2) + 'x'
+                : '—';
+        }
+
+        async function playDice() {
+            if (!AUTH_TOKEN) { showToast('🔒 Please sign in first'); return; }
+            if (diceRolling) return;
+            const betAmount = parseInt(document.getElementById('diceBetInput').value, 10);
+            if (!Number.isFinite(betAmount) || betAmount < 5 || betAmount > 500) {
+                showToast('Bet must be between 5 and 500 ETB');
+                return;
+            }
+            const target = diceTargetFromInput(document.getElementById('diceTargetSlider').value);
+            const btn = document.getElementById('dicePlayBtn');
+            const rollEl = document.getElementById('diceRoll');
+            const statusEl = document.getElementById('diceStatus');
+            diceRolling = true;
+            btn.disabled = true;
+            if (statusEl) statusEl.textContent = 'Rolling…';
+            try {
+                const resp = await fetch('/api/games/bet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN,
+                        'Idempotency-Key': makeIdempotencyKey()
+                    },
+                    body: JSON.stringify({ game: 'dice', bet_amount: betAmount, selection: { target, direction: diceDirection } })
+                });
+                const data = await readJsonResponse(resp, 'Dice');
+                if (!resp.ok) { showToast('❌ ' + ((data && data.error) || 'Bet failed')); return; }
+                const res = data.result || {};
+                if (rollEl) { rollEl.textContent = Number(res.roll) || 0; rollEl.classList.toggle('win', !!res.won); rollEl.classList.toggle('loss', !res.won); }
+                if (statusEl) {
+                    statusEl.textContent = res.won
+                        ? 'Won ' + (res.payout || 0) + ' ETB · roll ' + res.roll + ' ' + diceDirection + ' ' + target
+                        : 'Lost · roll ' + res.roll + ' was not ' + diceDirection + ' ' + target;
+                }
+                diceHistory.unshift({ roll: Number(res.roll) || 0, won: !!res.won });
+                diceHistory = diceHistory.slice(0, 10);
+                const pills = document.getElementById('diceHistoryPills');
+                if (pills) {
+                    pills.textContent = '';
+                    diceHistory.forEach(h => {
+                        const pill = document.createElement('div');
+                        pill.className = 'avi-pill';
+                        pill.style.background = h.won ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)';
+                        pill.style.color = h.won ? '#10b981' : '#ef4444';
+                        pill.textContent = h.roll;
+                        pills.appendChild(pill);
+                    });
+                }
+                if (res.won) { playSound('win'); createConfetti(); } else { playSound('error'); }
+                applyBalance(data.balance);
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                diceRolling = false;
+                btn.disabled = false;
             }
         }
 
@@ -2857,11 +3579,7 @@
                     playSound('error');
                 }
 
-                if (data.balance !== null && data.balance !== undefined) {
-                    if (currentUser) currentUser.balance = data.balance;
-                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
-                    updateGameBalancePills();
-                }
+                applyBalance(data.balance);
 
                 // Auto next round
                 setTimeout(() => { initHLCard(); hlPlaying = false; }, 2000);
@@ -2961,11 +3679,7 @@
                     playSound('error');
                 }
 
-                if (data.balance !== null && data.balance !== undefined) {
-                    if (currentUser) currentUser.balance = data.balance;
-                    document.getElementById('headerUserBalance').textContent = data.balance.toLocaleString() + ' ETB';
-                    updateGameBalancePills();
-                }
+                applyBalance(data.balance);
             } catch (_e) {
                 clearInterval(animInterval);
                 showToast('❌ Network error');
@@ -2989,101 +3703,373 @@
         }
 
         // ===== WALLET / DEPOSIT / WITHDRAWAL =====
+        let txFilter = 'all';
+        let txPage = 1;
+        const TX_PAGE_SIZE = 20;
+
         async function loadWallet() {
-            await refreshBalance();
-            loadTransactions();
+            await loadPaymentConfig();
+            await loadWalletSummary();
+            await loadRequests(1);
+            await loadTransactions(1);
         }
 
-        async function loadTransactions() {
-            const list = document.getElementById('txList');
-            if (!list || !AUTH_TOKEN) return;
-            list.innerHTML = '<div class="tx-empty">Loading...</div>';
+        async function loadWalletSummary() {
+            if (!AUTH_TOKEN) return;
             try {
-                const resp = await fetch('/api/transactions?limit=20', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const resp = await fetch('/api/wallet/summary', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Wallet');
+                if (!resp.ok || !data || !data.ok) { await refreshBalance(); return; }
+                applyBalance(data.balance);
+                const pending = document.getElementById('walletPending');
+                if (pending) {
+                    const parts = [];
+                    if (data.pending_deposits) parts.push('⏳ ' + formatEtb(data.pending_deposits) + ' ETB deposit pending');
+                    if (data.pending_withdrawals) parts.push('⏳ ' + formatEtb(data.pending_withdrawals) + ' ETB withdrawal pending');
+                    pending.textContent = parts.join(' · ');
+                    pending.style.display = parts.length ? 'block' : 'none';
+                }
+            } catch (_e) {
+                await refreshBalance();
+            }
+        }
+
+        function setTxFilter(filter) {
+            txFilter = filter;
+            document.querySelectorAll('#txFilters .bet-quick').forEach(b => {
+                b.classList.toggle('active', b.dataset.filter === filter);
+            });
+            loadTransactions(1);
+        }
+
+        function renderTransactionItem(tx) {
+            const typeIcon = { deposit: '💳', withdrawal: '💸', withdrawal_refund: '↩️', game_win: '🎮', game_loss: '🎮', game_bet: '🎮' };
+            const isPos = tx.amount > 0;
+            const el = document.createElement('div');
+            el.className = 'tx-item';
+            const desc = document.createElement('div');
+            desc.className = 'tx-desc';
+            desc.textContent = tx.description || tx.type;
+            const date = document.createElement('div');
+            date.className = 'tx-date';
+            date.textContent = new Date(tx.created_at).toLocaleDateString('en-ET', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            const icon = document.createElement('div');
+            icon.className = 'tx-icon ' + (tx.type || '');
+            icon.textContent = typeIcon[tx.type] || '💰';
+            const info = document.createElement('div');
+            info.className = 'tx-info';
+            info.appendChild(desc);
+            info.appendChild(date);
+            const amount = document.createElement('div');
+            amount.className = 'tx-amount ' + (isPos ? 'positive' : 'negative');
+            amount.textContent = (isPos ? '+' : '') + tx.amount + ' ETB';
+            el.appendChild(icon);
+            el.appendChild(info);
+            el.appendChild(amount);
+            return el;
+        }
+
+        async function loadTransactions(page) {
+            const list = document.getElementById('txList');
+            const moreBtn = document.getElementById('txMoreBtn');
+            if (!list || !AUTH_TOKEN) return;
+            const targetPage = Math.max(1, parseInt(page, 10) || 1);
+            const append = targetPage > 1;
+            if (!append) list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            if (moreBtn) moreBtn.disabled = true;
+            try {
+                const params = new URLSearchParams({ limit: String(TX_PAGE_SIZE), page: String(targetPage), filter: txFilter });
+                const resp = await fetch('/api/transactions?' + params.toString(), { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
                 const data = await readJsonResponse(resp, 'Transactions');
                 if (!resp.ok || !data || !data.ok) {
-                    list.innerHTML = '<div class="tx-empty">Failed to load transactions</div>';
+                    if (!append) list.innerHTML = '<div class="tx-empty">Failed to load transactions</div>';
+                    else showToast('❌ Could not load more transactions');
                     return;
                 }
-                if (!data.transactions || data.transactions.length === 0) {
+                txPage = targetPage;
+                const rows = data.transactions || [];
+                if (!append) list.innerHTML = '';
+                if (!append && rows.length === 0) {
                     list.innerHTML = '<div class="tx-empty">No transactions yet</div>';
-                    return;
                 }
-                list.innerHTML = '';
-                data.transactions.forEach(tx => {
-                    const typeIcon = { deposit: '💳', withdrawal: '💸', withdrawal_refund: '↩️', game_win: '🎮', game_loss: '🎮' };
-                    const isPos = tx.amount > 0;
-                    const el = document.createElement('div');
-                    el.className = 'tx-item';
-                    el.innerHTML = `
-                        <div class="tx-icon ${tx.type}">${typeIcon[tx.type] || '💰'}</div>
-                        <div class="tx-info">
-                            <div class="tx-desc">${tx.description || tx.type}</div>
-                            <div class="tx-date">${new Date(tx.created_at).toLocaleDateString('en-ET', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
-                        </div>
-                        <div class="tx-amount ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${tx.amount} ETB</div>
-                    `;
-                    list.appendChild(el);
-                });
+                rows.forEach(tx => list.appendChild(renderTransactionItem(tx)));
+                if (moreBtn) moreBtn.style.display = data.has_more ? 'block' : 'none';
             } catch (_e) {
-                list.innerHTML = '<div class="tx-empty">Error loading transactions</div>';
+                if (!append) list.innerHTML = '<div class="tx-empty">Error loading transactions</div>';
+                else showToast('❌ Network error');
+            } finally {
+                if (moreBtn) moreBtn.disabled = false;
+            }
+        }
+
+        // After returning from the Chapa checkout page we never trust the URL:
+        // the server re-verifies the transaction with the provider.
+        async function checkDepositReturn() {
+            const params = new URLSearchParams(window.location.search);
+            const txRef = params.get('tx_ref') || params.get('trx_ref');
+            if (!txRef || !AUTH_TOKEN) return;
+            try {
+                const resp = await fetch('/api/deposits/' + encodeURIComponent(txRef) + '/status', {
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Deposit status');
+                if (resp.ok && data && data.ok) {
+                    if (data.status === 'completed') {
+                        showToast('✅ Deposit confirmed');
+                        await loadWalletSummary();
+                        createConfetti();
+                    } else if (data.status === 'pending') {
+                        showToast('⏳ Deposit is still being verified');
+                    } else {
+                        showToast('❌ Deposit ' + data.status);
+                    }
+                }
+            } catch (_e) { /* silent: the webhook still settles it */ }
+            const url = new URL(window.location.href);
+            url.searchParams.delete('tx_ref');
+            url.searchParams.delete('trx_ref');
+            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            showTab('wallet');
+        }
+
+        // ===== MANUAL PAYMENT CONFIGURATION (server-provided) =====
+        // The destination list, limits and the Chapa switch all come from the
+        // backend; nothing about where money goes is hard-coded in the client.
+        let walletConfig = { destinations: [], limits: null, chapa_enabled: false, notice: '' };
+        let walletConfigLoaded = false;
+
+        async function loadPaymentConfig(force) {
+            if (!AUTH_TOKEN) return walletConfig;
+            if (walletConfigLoaded && !force) return walletConfig;
+            try {
+                const resp = await fetch('/api/payment/destinations', { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Payment destinations');
+                if (resp.ok && data && data.ok) {
+                    walletConfig = {
+                        destinations: data.destinations || [],
+                        limits: data.limits || null,
+                        chapa_enabled: Boolean(data.chapa_enabled),
+                        notice: data.notice || ''
+                    };
+                    walletConfigLoaded = true;
+                    renderPaymentConfig();
+                }
+            } catch (_e) { /* the modal keeps its placeholder copy */ }
+            return walletConfig;
+        }
+
+        function renderDestinationRow(dest) {
+            const row = document.createElement('div');
+            row.className = 'manual-info-row';
+            const left = document.createElement('div');
+            const label = document.createElement('div');
+            label.className = 'mir-label';
+            label.textContent = (dest.type === 'telebirr' ? '📱 ' : '🏦 ') + dest.bank_name;
+            const number = document.createElement('div');
+            number.style.cssText = 'font-size:12px;font-weight:700;font-family:monospace;';
+            number.textContent = dest.account_number;
+            const holder = document.createElement('div');
+            holder.style.cssText = 'font-size:11px;color:var(--text2);';
+            holder.textContent = dest.account_holder;
+            left.appendChild(label);
+            left.appendChild(number);
+            left.appendChild(holder);
+            const copy = document.createElement('button');
+            copy.className = 'mir-copy';
+            copy.type = 'button';
+            copy.textContent = 'Copy';
+            copy.addEventListener('click', function () { copyManual(dest.account_number, copy); });
+            row.appendChild(left);
+            row.appendChild(copy);
+            return row;
+        }
+
+        function renderPaymentConfig() {
+            const raffleCards = document.getElementById('rafflePaymentCards');
+            if (raffleCards) {
+                raffleCards.innerHTML = '';
+                walletConfig.destinations.forEach(dest => {
+                    const card = document.createElement('div');
+                    card.className = 'pay-card';
+                    const icon = document.createElement('div');
+                    icon.className = 'icon';
+                    icon.textContent = dest.type === 'telebirr' ? '📱' : '🏦';
+                    const info = document.createElement('div');
+                    info.className = 'info';
+                    const name = document.createElement('div');
+                    name.className = 'name';
+                    name.textContent = dest.bank_name;
+                    const detail = document.createElement('div');
+                    detail.className = 'detail';
+                    detail.textContent = dest.account_number + ' · ' + dest.account_holder;
+                    info.appendChild(name);
+                    info.appendChild(detail);
+                    const copy = document.createElement('button');
+                    copy.className = 'copy';
+                    copy.type = 'button';
+                    copy.textContent = 'Copy';
+                    copy.addEventListener('click', function () { copyText(dest.account_number, copy); });
+                    card.appendChild(icon);
+                    card.appendChild(info);
+                    card.appendChild(copy);
+                    raffleCards.appendChild(card);
+                });
+            }
+
+            const card = document.getElementById('manualDestinations');
+            if (card) {
+                card.innerHTML = '';
+                if (walletConfig.destinations.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'manual-info-row';
+                    empty.textContent = 'No payment accounts are configured yet. Please contact support.';
+                    card.appendChild(empty);
+                } else {
+                    walletConfig.destinations.forEach(d => card.appendChild(renderDestinationRow(d)));
+                }
+            }
+
+            const select = document.getElementById('manualDestinationSelect');
+            if (select) {
+                const previous = select.value;
+                select.innerHTML = '';
+                walletConfig.destinations.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id;
+                    opt.textContent = d.bank_name + ' · ' + d.account_number;
+                    select.appendChild(opt);
+                });
+                if (previous) select.value = previous;
+            }
+
+            const notice = document.getElementById('manualDepositNotice');
+            if (notice && walletConfig.notice) notice.textContent = walletConfig.notice;
+
+            const limits = walletConfig.limits;
+            if (limits) {
+                const amountInput = document.getElementById('manualAmountInput');
+                if (amountInput) {
+                    amountInput.min = limits.deposit_min;
+                    amountInput.max = limits.deposit_max;
+                    amountInput.placeholder = 'e.g. ' + limits.deposit_min;
+                }
+                const wdInput = document.getElementById('wdAmountInput');
+                if (wdInput) {
+                    wdInput.min = limits.withdraw_min;
+                    wdInput.max = limits.withdraw_max;
+                }
+                const wdNote = document.getElementById('wdLimitsNote');
+                if (wdNote) {
+                    wdNote.textContent = 'Withdraw between ' + limits.withdraw_min + ' and ' + limits.withdraw_max +
+                        ' ETB • The amount is reserved immediately and paid out manually after review';
+                }
+            }
+
+            // The legacy automatic gateway only appears when an operator enabled it.
+            const chapaTab = document.getElementById('depTabChapa');
+            if (chapaTab) {
+                chapaTab.style.display = walletConfig.chapa_enabled ? '' : 'none';
+                if (!walletConfig.chapa_enabled && activeDepTab !== 'manual') switchDepTab('manual');
             }
         }
 
         function showDepositModal() {
             document.getElementById('depositModal').classList.add('active');
+            switchDepTab('manual');
+            loadPaymentConfig();
         }
 
         function closeDepositModal() {
             document.getElementById('depositModal').classList.remove('active');
+            resetDepositProof();
+            const status = document.getElementById('manualDepStatus');
+            if (status) { status.style.display = 'none'; status.textContent = ''; }
+        }
+
+        function resetDepositProof() {
             depScreenshotFile = null;
-            document.getElementById('depFileInput').value = '';
-            document.getElementById('depZoneIcon').textContent = '📤';
-            document.getElementById('depZoneText').textContent = 'Tap to upload screenshot';
-            document.getElementById('depScreenshotZone').classList.remove('has-file');
+            const input = document.getElementById('depFileInput');
+            if (input) input.value = '';
+            const icon = document.getElementById('depZoneIcon');
+            if (icon) icon.textContent = '📤';
+            const text = document.getElementById('depZoneText');
+            if (text) text.textContent = 'Tap to upload screenshot';
+            const zone = document.getElementById('depScreenshotZone');
+            if (zone) zone.classList.remove('has-file');
+            const preview = document.getElementById('depProofPreview');
+            if (preview) {
+                if (preview.dataset.objectUrl) { URL.revokeObjectURL(preview.dataset.objectUrl); delete preview.dataset.objectUrl; }
+                preview.style.display = 'none';
+                preview.removeAttribute('src');
+            }
         }
 
         function showWithdrawModal() {
             document.getElementById('withdrawModal').classList.add('active');
+            loadPaymentConfig();
         }
 
         function closeWithdrawModal() {
             document.getElementById('withdrawModal').classList.remove('active');
+            const status = document.getElementById('wdStatus');
+            if (status) { status.style.display = 'none'; status.textContent = ''; }
         }
 
-        let activeDepTab = 'chapa';
+        let activeDepTab = 'manual';
         function switchDepTab(tab) {
             activeDepTab = tab;
-            document.getElementById('depTabChapa').classList.toggle('active', tab === 'chapa');
-            document.getElementById('depTabManual').classList.toggle('active', tab === 'manual');
-            document.getElementById('depFormChapa').style.display = tab === 'chapa' ? 'flex' : 'none';
-            document.getElementById('depFormManual').style.display = tab === 'manual' ? 'flex' : 'none';
-        }
-
-        let selectedManualMethod = 'telebirr';
-        function selectManualMethod(m) {
-            selectedManualMethod = m;
-            ['telebirr','dashen','cbe'].forEach(id => {
-                document.getElementById('manMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
-            });
+            const chapaTab = document.getElementById('depTabChapa');
+            const manualTab = document.getElementById('depTabManual');
+            if (chapaTab) chapaTab.classList.toggle('active', tab === 'chapa');
+            if (manualTab) manualTab.classList.toggle('active', tab === 'manual');
+            const chapaForm = document.getElementById('depFormChapa');
+            const manualForm = document.getElementById('depFormManual');
+            if (chapaForm) chapaForm.style.display = tab === 'chapa' ? 'flex' : 'none';
+            if (manualForm) manualForm.style.display = tab === 'manual' ? 'flex' : 'none';
         }
 
         let selectedWdMethod = 'telebirr';
         function selectWdMethod(m) {
-            selectedWdMethod = m;
-            ['telebirr','dashen','cbe'].forEach(id => {
-                document.getElementById('wdMeth' + id.charAt(0).toUpperCase() + id.slice(1)).classList.toggle('active', id === m);
-            });
+            selectedWdMethod = m === 'bank' ? 'bank' : 'telebirr';
+            const telebirrBtn = document.getElementById('wdMethTelebirr');
+            const bankBtn = document.getElementById('wdMethBank');
+            if (telebirrBtn) telebirrBtn.classList.toggle('active', selectedWdMethod === 'telebirr');
+            if (bankBtn) bankBtn.classList.toggle('active', selectedWdMethod === 'bank');
+            const bankRow = document.getElementById('wdBankRow');
+            if (bankRow) bankRow.style.display = selectedWdMethod === 'bank' ? 'block' : 'none';
+            const label = document.getElementById('wdAccountLabel');
+            if (label) label.textContent = selectedWdMethod === 'bank' ? 'bank account number' : 'Telebirr number';
         }
 
+        const PROOF_MAX_BYTES = 6 * 1024 * 1024;
+        const PROOF_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
         let depScreenshotFile = null;
+
         function handleDepFile(event) {
-            const file = event.target.files[0];
+            const file = event.target.files && event.target.files[0];
             if (!file) return;
+            if (PROOF_TYPES.indexOf(file.type) === -1) {
+                showToast('❌ Only JPG, PNG or WebP images are accepted');
+                resetDepositProof();
+                return;
+            }
+            if (file.size > PROOF_MAX_BYTES) {
+                showToast('❌ The screenshot must be smaller than 6 MB');
+                resetDepositProof();
+                return;
+            }
             depScreenshotFile = file;
             document.getElementById('depZoneIcon').textContent = '✅';
             document.getElementById('depZoneText').textContent = file.name;
             document.getElementById('depScreenshotZone').classList.add('has-file');
+            const preview = document.getElementById('depProofPreview');
+            if (preview && typeof URL.createObjectURL === 'function') {
+                if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+                const objectUrl = URL.createObjectURL(file);
+                preview.dataset.objectUrl = objectUrl;
+                preview.src = objectUrl;
+                preview.style.display = 'block';
+            }
         }
 
         async function initChapaDeposit() {
@@ -3113,73 +4099,430 @@
             }
         }
 
+        function setManualDepositStatus(text) {
+            const status = document.getElementById('manualDepStatus');
+            if (!status) return;
+            status.textContent = text || '';
+            status.style.display = text ? 'block' : 'none';
+        }
+
+        /** Uploads the proof with progress reporting. Resolves with { status, data }. */
+        function uploadProof(formData, onProgress) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/deposits/manual');
+                xhr.setRequestHeader('Authorization', 'Bearer ' + AUTH_TOKEN);
+                if (xhr.upload && typeof onProgress === 'function') {
+                    xhr.upload.onprogress = function (e) {
+                        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+                    };
+                }
+                xhr.onload = function () {
+                    let data = null;
+                    try { data = JSON.parse(xhr.responseText); } catch (_e) { data = null; }
+                    resolve({ status: xhr.status, data });
+                };
+                xhr.onerror = function () { reject(new Error('network')); };
+                xhr.send(formData);
+            });
+        }
+
+        // The same idempotency key is reused while a submission is being retried
+        // so a flaky connection can not create two reviewable requests.
+        let manualDepositKey = null;
+
         async function submitManualDeposit() {
             if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            await loadPaymentConfig();
+            const limits = walletConfig.limits || { deposit_min: 10, deposit_max: 50000 };
             const amount = Number(document.getElementById('manualAmountInput').value);
-            if (!amount || amount < 10) { showToast('Minimum deposit is 10 ETB'); return; }
-            if (!depScreenshotFile) { showToast('Please upload payment receipt'); return; }
+            if (!Number.isFinite(amount) || amount < limits.deposit_min || amount > limits.deposit_max) {
+                showToast('❌ Deposit must be between ' + limits.deposit_min + ' and ' + limits.deposit_max + ' ETB');
+                return;
+            }
+            const destinationSelect = document.getElementById('manualDestinationSelect');
+            const destinationId = destinationSelect ? destinationSelect.value : '';
+            if (!destinationId) { showToast('❌ Choose where you sent the money'); return; }
+            const senderReference = document.getElementById('manualSenderRef').value.trim();
+            if (senderReference.length < 4) { showToast('❌ Enter the phone or account you sent from'); return; }
+            if (!depScreenshotFile) { showToast('❌ Attach your payment receipt'); return; }
 
             const btn = document.getElementById('manualDepBtn');
+            if (btn.disabled) return;
             btn.disabled = true;
-            btn.textContent = '⏳ Submitting...';
+            btn.textContent = '⏳ Uploading...';
+            manualDepositKey = manualDepositKey || makeIdempotencyKey();
+            setManualDepositStatus('Uploading proof… 0%');
 
             try {
                 const fd = new FormData();
-                fd.append('amount', amount);
-                fd.append('payment_method', selectedManualMethod);
+                fd.append('amount', String(amount));
+                fd.append('destination_id', destinationId);
+                fd.append('sender_reference', senderReference);
+                fd.append('external_reference', document.getElementById('manualExternalRef').value.trim());
+                fd.append('note', document.getElementById('manualNote').value.trim());
+                fd.append('idempotency_key', manualDepositKey);
                 fd.append('screenshot', depScreenshotFile);
-                const resp = await fetch('/api/deposits/manual', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN },
-                    body: fd
-                });
-                const data = await readJsonResponse(resp, 'Manual deposit');
-                if (resp.ok && data && data.ok) {
-                    showToast('✅ Deposit submitted! Admin will confirm shortly.');
+
+                const { status, data } = await uploadProof(fd, p => setManualDepositStatus('Uploading proof… ' + p + '%'));
+                if (status >= 200 && status < 300 && data && data.ok) {
+                    manualDepositKey = null;
+                    showToast('✅ ' + (data.message || 'Proof submitted for review'));
+                    setManualDepositStatus('');
                     closeDepositModal();
+                    document.getElementById('manualAmountInput').value = '';
+                    document.getElementById('manualExternalRef').value = '';
+                    document.getElementById('manualNote').value = '';
+                    await refreshWalletViews();
+                } else if (status === 409) {
+                    manualDepositKey = null;
+                    showToast('❌ ' + ((data && data.error) || 'This transfer was already submitted'));
+                    setManualDepositStatus('Already submitted — check your request history.');
                 } else {
-                    showToast('❌ ' + (data?.error || 'Submission failed'));
+                    showToast('❌ ' + ((data && data.error) || 'Submission failed'));
+                    setManualDepositStatus('Submission failed. You can try again.');
                 }
             } catch (_e) {
-                showToast('❌ Network error');
+                showToast('❌ Network error – please retry');
+                setManualDepositStatus('Upload interrupted. Tap submit to retry safely.');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '📨 Submit for Review';
+                btn.textContent = '📨 Submit Proof for Review';
             }
         }
 
+        let withdrawalKey = null;
+
         async function submitWithdrawal() {
             if (!AUTH_TOKEN || !currentUser) { showToast('Please sign in'); return; }
+            await loadPaymentConfig();
+            const limits = walletConfig.limits || { withdraw_min: 50, withdraw_max: 25000 };
             const amount = Number(document.getElementById('wdAmountInput').value);
-            if (!amount || amount < 50) { showToast('Minimum withdrawal is 50 ETB'); return; }
+            if (!Number.isFinite(amount) || amount < limits.withdraw_min || amount > limits.withdraw_max) {
+                showToast('❌ Withdrawal must be between ' + limits.withdraw_min + ' and ' + limits.withdraw_max + ' ETB');
+                return;
+            }
             const account_number = document.getElementById('wdAccountNum').value.trim();
             const account_name = document.getElementById('wdAccountName').value.trim();
-            if (!account_number || !account_name) { showToast('Account number and name are required'); return; }
+            const bank_name = document.getElementById('wdBankName').value.trim();
+            if (!account_number || account_name.length < 2) { showToast('❌ Account number and holder name are required'); return; }
+            if (selectedWdMethod === 'bank' && bank_name.length < 2) { showToast('❌ Enter your bank name'); return; }
 
             const btn = document.getElementById('wdSubmitBtn');
+            if (btn.disabled) return;
             btn.disabled = true;
             btn.textContent = '⏳ Submitting...';
+            withdrawalKey = withdrawalKey || makeIdempotencyKey();
 
             try {
                 const resp = await fetch('/api/withdrawals', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
-                    body: JSON.stringify({ amount, payment_method: selectedWdMethod, account_number, account_name })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + AUTH_TOKEN,
+                        'Idempotency-Key': withdrawalKey
+                    },
+                    body: JSON.stringify({
+                        amount,
+                        destination_type: selectedWdMethod,
+                        bank_name: selectedWdMethod === 'bank' ? bank_name : undefined,
+                        account_number,
+                        account_name,
+                        note: document.getElementById('wdNote').value.trim() || undefined
+                    })
                 });
                 const data = await readJsonResponse(resp, 'Withdrawal');
                 if (resp.ok && data && data.ok) {
-                    showToast('✅ Withdrawal requested! Will be processed in 24h.');
+                    withdrawalKey = null;
+                    showToast('✅ ' + (data.message || 'Withdrawal requested'));
                     closeWithdrawModal();
-                    refreshBalance();
+                    document.getElementById('wdAmountInput').value = '';
+                    if (typeof data.balance === 'number') applyBalance(data.balance);
+                    await refreshWalletViews();
                 } else {
                     showToast('❌ ' + (data?.error || 'Request failed'));
+                    const status = document.getElementById('wdStatus');
+                    if (status) { status.textContent = (data && data.error) || 'Request failed'; status.style.display = 'block'; }
                 }
             } catch (_e) {
-                showToast('❌ Network error');
+                showToast('❌ Network error – please retry');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💸 Request Withdrawal';
             }
+        }
+
+        // ===== ADMIN – MANUAL MONEY REVIEW =====
+        // Every button here calls an authenticated admin endpoint; the server
+        // re-checks the role, the state machine and the one-time credit, so the
+        // UI can never approve twice by double-clicking or refreshing.
+        let adminQueue = 'deposits';
+
+        function setAdminQueue(queue) {
+            adminQueue = queue === 'withdrawals' ? 'withdrawals' : 'deposits';
+            document.querySelectorAll('#adminQueueFilters .bet-quick').forEach(b => {
+                if (b.dataset.queue) b.classList.toggle('active', b.dataset.queue === adminQueue);
+            });
+            loadAdminQueue();
+        }
+
+        function adminQueueRow(row) {
+            const el = document.createElement('div');
+            el.className = 'tx-item';
+            const info = document.createElement('div');
+            info.className = 'tx-info';
+            const desc = document.createElement('div');
+            desc.className = 'tx-desc';
+            const who = (row.users && (row.users.email || row.users.full_name)) || row.user_id;
+            desc.textContent = row.amount + ' ETB · ' + who;
+            const meta = document.createElement('div');
+            meta.className = 'tx-date';
+            meta.textContent = adminQueue === 'deposits'
+                ? [row.destination_id, row.external_reference, row.note].filter(Boolean).join(' · ')
+                : [row.bank_name || row.payment_method, row.account_name, row.note].filter(Boolean).join(' · ');
+            const when = document.createElement('div');
+            when.className = 'tx-date';
+            when.textContent = new Date(row.created_at).toLocaleString('en-ET');
+            info.appendChild(desc);
+            info.appendChild(meta);
+            info.appendChild(when);
+            el.appendChild(info);
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+
+            if (adminQueue === 'deposits') {
+                if (row.has_proof) {
+                    const proof = document.createElement('button');
+                    proof.className = 'mir-copy';
+                    proof.type = 'button';
+                    proof.textContent = 'Proof';
+                    proof.addEventListener('click', function () { openProof(row.id, proof); });
+                    actions.appendChild(proof);
+                }
+                actions.appendChild(adminActionButton('Approve', function (btn) {
+                    return adminPost('/api/admin/deposits/' + encodeURIComponent(row.id) + '/approve', {}, btn);
+                }));
+                actions.appendChild(adminActionButton('Reject', function (btn) {
+                    const reason = window.prompt('Reason for rejection (optional)') || '';
+                    return adminPost('/api/admin/deposits/' + encodeURIComponent(row.id) + '/reject', { reason }, btn);
+                }));
+            } else {
+                actions.appendChild(adminActionButton('Mark paid', function (btn) {
+                    const payment_reference = window.prompt('External payment reference (optional)') || '';
+                    return adminPost('/api/admin/withdrawals/' + encodeURIComponent(row.id) + '/paid', { payment_reference }, btn);
+                }));
+                actions.appendChild(adminActionButton('Reject', function (btn) {
+                    const reason = window.prompt('Reason for rejection (optional)') || '';
+                    return adminPost('/api/admin/withdrawals/' + encodeURIComponent(row.id) + '/reject', { reason }, btn);
+                }));
+            }
+
+            el.appendChild(actions);
+            return el;
+        }
+
+        function adminActionButton(label, handler) {
+            const btn = document.createElement('button');
+            btn.className = 'mir-copy';
+            btn.type = 'button';
+            btn.textContent = label;
+            btn.addEventListener('click', async function () {
+                if (btn.disabled) return;
+                btn.disabled = true;
+                try {
+                    await handler(btn);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+            return btn;
+        }
+
+        async function adminPost(path, body, btn) {
+            if (!AUTH_TOKEN) { showToast('Please sign in'); return; }
+            try {
+                const resp = await fetch(path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    body: JSON.stringify(body || {})
+                });
+                const data = await readJsonResponse(resp, 'Admin action');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ ' + (data.message || 'Done'));
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Action failed'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.blur();
+                await loadAdminQueue();
+            }
+        }
+
+        async function openProof(depositId, btn) {
+            if (btn) btn.disabled = true;
+            try {
+                const resp = await fetch('/api/deposits/' + encodeURIComponent(depositId) + '/proof', {
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Proof');
+                if (resp.ok && data && data.ok && data.url) {
+                    window.open(data.url, '_blank', 'noopener');
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Proof unavailable'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function loadAdminQueue() {
+            const list = document.getElementById('adminQueueList');
+            if (!list || !isAdmin || !AUTH_TOKEN) return;
+            list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            try {
+                const endpoint = adminQueue === 'withdrawals' ? '/api/admin/withdrawals' : '/api/admin/deposits';
+                const resp = await fetch(endpoint + '?status=pending&limit=20', {
+                    headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Admin queue');
+                if (!resp.ok || !data || !data.ok) {
+                    list.innerHTML = '<div class="tx-empty">Failed to load requests</div>';
+                    return;
+                }
+                const rows = (adminQueue === 'withdrawals' ? data.withdrawals : data.deposits) || [];
+                list.innerHTML = '';
+                if (rows.length === 0) {
+                    list.innerHTML = '<div class="tx-empty">Nothing waiting for review</div>';
+                    return;
+                }
+                rows.forEach(row => list.appendChild(adminQueueRow(row)));
+            } catch (_e) {
+                list.innerHTML = '<div class="tx-empty">Error loading requests</div>';
+            }
+        }
+
+        // ===== MANUAL REQUEST HISTORY =====
+        let requestFilter = 'deposits';
+        let requestPage = 1;
+
+        function setRequestFilter(filter) {
+            requestFilter = filter === 'withdrawals' ? 'withdrawals' : 'deposits';
+            document.querySelectorAll('#reqFilters .bet-quick').forEach(b => {
+                b.classList.toggle('active', b.dataset.reqFilter === requestFilter);
+            });
+            loadRequests(1);
+        }
+
+        function requestStatusEmoji(status) {
+            if (status === 'approved' || status === 'paid' || status === 'completed') return '✅';
+            if (status === 'rejected') return '❌';
+            if (status === 'cancelled') return '🚫';
+            if (status === 'processing') return '🔄';
+            return '⏳';
+        }
+
+        function renderRequestItem(row, kind) {
+            const el = document.createElement('div');
+            el.className = 'tx-item';
+            const icon = document.createElement('div');
+            icon.className = 'tx-icon';
+            icon.textContent = kind === 'deposits' ? '🧾' : '💸';
+            const info = document.createElement('div');
+            info.className = 'tx-info';
+            const desc = document.createElement('div');
+            desc.className = 'tx-desc';
+            const label = kind === 'deposits'
+                ? 'Manual deposit' + (row.destination_id ? ' · ' + row.destination_id : '')
+                : 'Withdrawal' + (row.bank_name ? ' · ' + row.bank_name : '');
+            desc.textContent = requestStatusEmoji(row.status) + ' ' + label + ' — ' + row.status;
+            const date = document.createElement('div');
+            date.className = 'tx-date';
+            date.textContent = new Date(row.created_at).toLocaleDateString('en-ET', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            info.appendChild(desc);
+            info.appendChild(date);
+            if (row.review_reason || row.admin_notes) {
+                const reason = document.createElement('div');
+                reason.className = 'tx-date';
+                reason.textContent = row.review_reason || row.admin_notes;
+                info.appendChild(reason);
+            }
+            const amount = document.createElement('div');
+            amount.className = 'tx-amount ' + (kind === 'deposits' ? 'positive' : 'negative');
+            amount.textContent = (kind === 'deposits' ? '+' : '-') + row.amount + ' ETB';
+            el.appendChild(icon);
+            el.appendChild(info);
+            el.appendChild(amount);
+            if (kind === 'withdrawals' && row.status === 'pending') {
+                const cancel = document.createElement('button');
+                cancel.className = 'mir-copy';
+                cancel.type = 'button';
+                cancel.textContent = 'Cancel';
+                cancel.addEventListener('click', function () { cancelWithdrawal(row.id, cancel); });
+                el.appendChild(cancel);
+            }
+            return el;
+        }
+
+        async function loadRequests(page) {
+            const list = document.getElementById('requestList');
+            const moreBtn = document.getElementById('reqMoreBtn');
+            if (!list || !AUTH_TOKEN) return;
+            const targetPage = Math.max(1, parseInt(page, 10) || 1);
+            const append = targetPage > 1;
+            if (!append) list.innerHTML = '<div class="tx-empty">Loading...</div>';
+            try {
+                const endpoint = requestFilter === 'withdrawals' ? '/api/withdrawals' : '/api/deposits/manual';
+                const params = new URLSearchParams({ page: String(targetPage), limit: '20' });
+                const resp = await fetch(endpoint + '?' + params.toString(), { headers: { 'Authorization': 'Bearer ' + AUTH_TOKEN } });
+                const data = await readJsonResponse(resp, 'Requests');
+                if (!resp.ok || !data || !data.ok) {
+                    if (!append) list.innerHTML = '<div class="tx-empty">Failed to load requests</div>';
+                    return;
+                }
+                requestPage = targetPage;
+                const rows = (requestFilter === 'withdrawals' ? data.withdrawals : data.deposits) || [];
+                if (!append) list.innerHTML = '';
+                if (!append && rows.length === 0) {
+                    list.innerHTML = '<div class="tx-empty">No requests yet</div>';
+                }
+                rows.forEach(row => list.appendChild(renderRequestItem(row, requestFilter)));
+                if (moreBtn) moreBtn.style.display = (targetPage * 20) < (data.total || 0) ? 'block' : 'none';
+            } catch (_e) {
+                if (!append) list.innerHTML = '<div class="tx-empty">Error loading requests</div>';
+            }
+        }
+
+        async function cancelWithdrawal(id, btn) {
+            if (btn) btn.disabled = true;
+            try {
+                const resp = await fetch('/api/withdrawals/' + encodeURIComponent(id) + '/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN }
+                });
+                const data = await readJsonResponse(resp, 'Cancel withdrawal');
+                if (resp.ok && data && data.ok) {
+                    showToast('✅ ' + (data.message || 'Withdrawal cancelled'));
+                    await refreshWalletViews();
+                } else {
+                    showToast('❌ ' + ((data && data.error) || 'Could not cancel'));
+                }
+            } catch (_e) {
+                showToast('❌ Network error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Keeps every balance on screen in sync without a page reload.
+        async function refreshWalletViews() {
+            await loadWalletSummary();
+            await loadRequests(1);
+            await loadTransactions(1);
         }
 
         function copyManual(text, btn) {

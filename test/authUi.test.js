@@ -364,3 +364,320 @@ test('passwords are never written to the console', async () => {
     app.close();
   }
 });
+
+// ===== FAST KENO SCREEN =====
+
+function fastKenoState({ phase = 'betting', drawn = null, bet = null, index = 100 } = {}) {
+  const now = Date.now();
+  return {
+    ok: true,
+    config: {
+      pool: 40,
+      draw_count: 10,
+      max_picks: 8,
+      min_bet: 5,
+      max_bet: 500,
+      betting_ms: 20000,
+      drawing_ms: 6000,
+      result_ms: 6000,
+      paytables: { 1: [0, 3.8], 2: [0, 0, 16.47], 3: [0, 0, 0, 78.22] }
+    },
+    round: {
+      id: 'fk-' + index,
+      index,
+      phase,
+      ms_remaining: 5000,
+      opens_at: now - 1000,
+      closes_at: now + 5000,
+      drawn_at: now + 11000,
+      ends_at: now + 17000,
+      server_time: now,
+      drawn
+    },
+    previous_round: null,
+    bet,
+    recent_bets: bet ? [bet] : []
+  };
+}
+
+// jsdom has no Web Audio or animation frames; the game screens only use them
+// for feedback, so they are stubbed out to keep the assertions on behaviour.
+function silenceEffects(app) {
+  app.window.playSound = () => {};
+  app.window.createConfetti = () => {};
+  return app;
+}
+
+function bootFastKeno(stateFactory, extraFetch) {
+  return silenceEffects(bootShell({
+    storedToken: 'token-123',
+    fetchImpl: (url, options) => {
+      if (url === '/api/auth/me') {
+        return Promise.resolve(jsonResponse({ ok: true, user: { id: 'u1', fullName: 'Abebe', balance: 500 } }));
+      }
+      if (url === '/api/games/fast-keno/state') return Promise.resolve(jsonResponse(stateFactory()));
+      if (url === '/api/games/rules') {
+        return Promise.resolve(jsonResponse({
+          ok: true,
+          math_version: 'v1',
+          target_rtp: 0.95,
+          games: { dice: { faces: 100, min_target: 2, max_target: 99, target_rtp: 0.95 } }
+        }));
+      }
+      if (extraFetch) {
+        const handled = extraFetch(url, options);
+        if (handled) return handled;
+      }
+      return Promise.resolve(jsonResponse({ ok: true }));
+    }
+  }));
+}
+
+test('fast keno screen renders the pool from the server config and allows picks while betting', async () => {
+  const app = bootFastKeno(() => fastKenoState({ phase: 'betting' }));
+  try {
+    await flush();
+    app.window.showTab('fast_keno');
+    await flush();
+    assert.equal(app.document.getElementById('screenFastKeno').classList.contains('active'), true);
+    assert.equal(app.document.getElementById('fkGrid').children.length, 40);
+    const ball = app.document.getElementById('fkb-7');
+    assert.equal(ball.disabled, false);
+    tap(ball);
+    assert.equal(ball.getAttribute('aria-pressed'), 'true');
+    assert.equal(app.document.getElementById('fkPickedCount').textContent, '1');
+    app.window.showTab('games');
+  } finally {
+    app.close();
+  }
+});
+
+test('fast keno blocks picks and betting once the round has closed', async () => {
+  const app = bootFastKeno(() => fastKenoState({ phase: 'drawing' }));
+  try {
+    await flush();
+    app.window.showTab('fast_keno');
+    await flush();
+    assert.equal(app.document.getElementById('fkb-7').disabled, true);
+    assert.equal(app.document.getElementById('fkPlayBtn').disabled, true);
+    assert.equal(app.document.getElementById('fkQuickPickBtn').disabled, true);
+    app.window.showTab('games');
+  } finally {
+    app.close();
+  }
+});
+
+test('fast keno restores an existing ticket and renders the settled result from the server', async () => {
+  const bet = {
+    id: 'bet-1',
+    round_index: 100,
+    round_id: 'fk-100',
+    picks: [3, 9, 21],
+    stake_cents: 1000,
+    payout_cents: 7822,
+    hits: 3,
+    multiplier: 78.22,
+    status: 'settled'
+  };
+  const app = bootFastKeno(() => fastKenoState({ phase: 'result', drawn: [3, 9, 21, 5, 6, 7, 8, 10, 11, 12], bet }));
+  try {
+    await flush();
+    app.window.showTab('fast_keno');
+    await flush();
+    assert.equal(app.document.getElementById('fkDrawnRow').children.length, 10);
+    assert.match(app.document.getElementById('fkTicket').textContent, /fk-100/);
+    assert.equal(app.document.getElementById('fkHits').textContent, '3');
+    assert.equal(app.document.getElementById('fkPayout').textContent, '+78.22');
+    assert.equal(app.document.getElementById('fkBanner').classList.contains('win'), true);
+    // A settled bet must not let the player stake again on the same round.
+    assert.equal(app.document.getElementById('fkPlayBtn').disabled, true);
+    app.window.showTab('games');
+  } finally {
+    app.close();
+  }
+});
+
+test('fast keno sends the round id and an idempotency key when placing a bet', async () => {
+  let betRequest = null;
+  const app = bootFastKeno(
+    () => fastKenoState({ phase: 'betting' }),
+    (url, options) => {
+      if (url === '/api/games/fast-keno/bet') {
+        betRequest = options;
+        return Promise.resolve(jsonResponse({ ok: true, bet_id: 'b1', balance: 490, replayed: false }, 201));
+      }
+      return null;
+    }
+  );
+  try {
+    await flush();
+    app.window.showTab('fast_keno');
+    await flush();
+    tap(app.document.getElementById('fkb-4'));
+    await app.window.placeFastKenoBet();
+    await flush();
+    assert.ok(betRequest, 'a bet request should have been sent');
+    assert.ok(betRequest.headers['Idempotency-Key'], 'the bet must carry an idempotency key');
+    const body = JSON.parse(betRequest.body);
+    assert.equal(body.round_id, 'fk-100');
+    assert.deepEqual(body.picks, [4]);
+    app.window.showTab('games');
+  } finally {
+    app.close();
+  }
+});
+
+test('dice target controls mirror the server payout formula without deciding the outcome', async () => {
+  const app = bootFastKeno(() => fastKenoState());
+  try {
+    await flush();
+    app.window.showTab('dice');
+    await flush();
+    // The preview must follow the RTP the server reports, never a hard-coded one.
+    app.window.updateDiceTarget(50);
+    assert.equal(app.document.getElementById('diceChance').textContent, '49%');
+    assert.equal(app.document.getElementById('diceMultiplier').textContent, '1.94x');
+    app.window.setDiceDirection('over');
+    assert.equal(app.document.getElementById('diceChance').textContent, '50%');
+    assert.equal(app.document.getElementById('diceMultiplier').textContent, '1.90x');
+  } finally {
+    app.close();
+  }
+});
+
+const DESTINATIONS_RESPONSE = {
+  ok: true,
+  chapa_enabled: false,
+  notice: 'Transfer the money yourself, then submit your receipt.',
+  limits: { deposit_min: 10, deposit_max: 5000, withdraw_min: 50, withdraw_max: 2500 },
+  destinations: [
+    { id: 'telebirr', type: 'telebirr', bank_name: 'Telebirr', account_holder: 'Lucky Birr', account_number: '0936719379', instructions: null },
+    { id: 'demo-bank', type: 'bank', bank_name: 'Demo Bank', account_holder: 'Example Holder', account_number: '1000000000000', instructions: null }
+  ]
+};
+
+function bootWallet(extraFetch) {
+  return bootFastKeno(() => fastKenoState(), (url, options) => {
+    if (String(url).startsWith('/api/payment/destinations')) return Promise.resolve(jsonResponse(DESTINATIONS_RESPONSE));
+    if (extraFetch) return extraFetch(url, options);
+    return null;
+  });
+}
+
+test('payment destinations come from the server, not from the page source', async () => {
+  // No bank account number or payment phone number may be baked into the shell.
+  const html = readGameShell();
+  assert.ok(!/5236271359011/.test(html), 'no hard-coded bank account number');
+  assert.ok(!/0936719379/.test(html), 'even the Telebirr number is server configuration');
+
+  const app = bootWallet();
+  try {
+    await flush();
+    app.window.showDepositModal();
+    await flush();
+    const card = app.document.getElementById('manualDestinations');
+    assert.match(card.textContent, /Telebirr/);
+    assert.match(card.textContent, /0936719379/);
+    assert.match(card.textContent, /Demo Bank/);
+    assert.match(card.textContent, /Example Holder/);
+
+    const options = [...app.document.getElementById('manualDestinationSelect').options].map((o) => o.value);
+    assert.deepEqual(options, ['telebirr', 'demo-bank']);
+
+    // The legacy automatic gateway stays hidden while it is disabled.
+    assert.equal(app.document.getElementById('depTabChapa').style.display, 'none');
+    assert.equal(app.document.getElementById('depFormManual').style.display, 'flex');
+
+    // Limits shown to the player mirror the server configuration.
+    assert.equal(app.document.getElementById('manualAmountInput').min, '10');
+    assert.equal(app.document.getElementById('manualAmountInput').max, '5000');
+    assert.match(app.document.getElementById('wdLimitsNote').textContent, /50 and 2500/);
+  } finally {
+    app.close();
+  }
+});
+
+test('submitting proof reports it as pending review and never as a completed deposit', async () => {
+  const uploads = [];
+  const app = bootWallet();
+  try {
+    await flush();
+    // Stub the upload transport so the form is exercised without a network.
+    app.window.XMLHttpRequest = function FakeXHR() {
+      this.upload = {};
+      this.open = (method, url) => { this.method = method; this.url = url; };
+      this.setRequestHeader = () => {};
+      this.send = (formData) => {
+        uploads.push({ url: this.url, formData });
+        this.status = 201;
+        this.responseText = JSON.stringify({ ok: true, depositId: 'd1', status: 'pending', message: 'Proof submitted for review' });
+        if (this.upload.onprogress) this.upload.onprogress({ lengthComputable: true, loaded: 5, total: 10 });
+        this.onload();
+      };
+    };
+
+    app.window.showDepositModal();
+    await flush();
+    app.document.getElementById('manualAmountInput').value = '250';
+    app.document.getElementById('manualSenderRef').value = '0912345678';
+    app.document.getElementById('manualExternalRef').value = 'TX-9911';
+    const file = new app.window.File(['x'], 'proof.png', { type: 'image/png' });
+    app.window.handleDepFile({ target: { files: [file] } });
+
+    const balanceBefore = app.document.getElementById('walletBalanceAmount').textContent;
+    await app.window.submitManualDeposit();
+    await flush();
+
+    assert.equal(uploads.length, 1, 'exactly one upload is sent');
+    assert.equal(uploads[0].url, '/api/deposits/manual');
+    assert.equal(uploads[0].formData.get('destination_id'), 'telebirr');
+    assert.equal(uploads[0].formData.get('external_reference'), 'TX-9911');
+    assert.ok(uploads[0].formData.get('idempotency_key'), 'a duplicate-protection key is attached');
+
+    const toast = app.document.getElementById('toast').textContent;
+    assert.match(toast, /Proof submitted for review/);
+    assert.ok(!/successful/i.test(toast), 'never claims the deposit succeeded');
+    assert.equal(app.document.getElementById('walletBalanceAmount').textContent, balanceBefore, 'balance is untouched');
+    assert.equal(app.document.getElementById('depositModal').classList.contains('active'), false);
+  } finally {
+    app.close();
+  }
+});
+
+test('the withdrawal form switches between Telebirr and bank payouts', async () => {
+  let withdrawalRequest = null;
+  const app = bootWallet((url, options) => {
+    if (url === '/api/withdrawals' && options && options.method === 'POST') {
+      withdrawalRequest = options;
+      return Promise.resolve(jsonResponse({ ok: true, withdrawalId: 'w1', balance: 400, message: 'Withdrawal request submitted.' }, 201));
+    }
+    return null;
+  });
+  try {
+    await flush();
+    app.window.showWithdrawModal();
+    await flush();
+
+    assert.equal(app.document.getElementById('wdBankRow').style.display, 'none');
+    app.window.selectWdMethod('bank');
+    assert.equal(app.document.getElementById('wdBankRow').style.display, 'block');
+    assert.match(app.document.getElementById('wdAccountLabel').textContent, /bank account/);
+
+    app.document.getElementById('wdAmountInput').value = '100';
+    app.document.getElementById('wdBankName').value = 'Demo Bank';
+    app.document.getElementById('wdAccountNum').value = '1000000000000';
+    app.document.getElementById('wdAccountName').value = 'Abebe Kebede';
+    await app.window.submitWithdrawal();
+    await flush();
+
+    assert.ok(withdrawalRequest, 'the withdrawal request is sent');
+    assert.ok(withdrawalRequest.headers['Idempotency-Key'], 'withdrawals carry an idempotency key');
+    const body = JSON.parse(withdrawalRequest.body);
+    assert.equal(body.destination_type, 'bank');
+    assert.equal(body.bank_name, 'Demo Bank');
+    // The balance shown updates from the server response, without a reload.
+    assert.equal(app.document.getElementById('walletBalanceAmount').textContent, '400');
+  } finally {
+    app.close();
+  }
+});

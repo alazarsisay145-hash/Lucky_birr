@@ -2668,7 +2668,7 @@
             if (tab === 'higher_lower') { updateGameBalancePills(); initHLCard(); }
             if (tab === 'aviator') updateGameBalancePills();
             if (tab === 'fast_keno') { updateGameBalancePills(); startFastKeno(); }
-            if (tab === 'dice') { updateGameBalancePills(); updateDiceTarget(document.getElementById('diceTargetSlider').value); }
+            if (tab === 'dice') { updateGameBalancePills(); loadDiceConfig(); updateDiceTarget(document.getElementById('diceTargetSlider').value); }
         }
 
         function startDraw() {
@@ -3193,12 +3193,16 @@
             if (!ticket) return;
             const bet = fkState && fkState.bet;
             if (!bet) { ticket.textContent = fkState && fkState.round && fkState.round.phase === 'betting' ? 'No ticket for this round yet.' : 'No ticket for this round.'; return; }
-            const stake = (bet.stake_cents || 0) / 100;
-            ticket.innerHTML = '<strong>' + bet.round_id + '</strong> · ' + stake + ' ETB on ' +
-                (bet.picks || []).join(', ') +
-                (bet.status === 'settled'
-                    ? ' · ' + (bet.hits || 0) + ' hits · ' + ((bet.payout_cents || 0) / 100) + ' ETB'
-                    : ' · waiting for the draw');
+            const stake = (Number(bet.stake_cents) || 0) / 100;
+            const picks = (bet.picks || []).map(Number).join(', ');
+            const tail = bet.status === 'settled'
+                ? ' · ' + (Number(bet.hits) || 0) + ' hits · ' + ((Number(bet.payout_cents) || 0) / 100) + ' ETB'
+                : ' · waiting for the draw';
+            ticket.textContent = '';
+            const ref = document.createElement('strong');
+            ref.textContent = String(bet.round_id || '');
+            ticket.appendChild(ref);
+            ticket.appendChild(document.createTextNode(' · ' + stake + ' ETB on ' + picks + tail));
         }
 
         function renderFastKenoResult() {
@@ -3236,13 +3240,26 @@
             if (!host) return;
             const bets = (fkState && fkState.recent_bets) || [];
             if (!bets.length) { host.innerHTML = '<div class="keno-payout-row"><span>No rounds played yet</span><span>—</span></div>'; return; }
-            host.innerHTML = bets.slice(0, 8).map(b => {
-                const payout = (b.payout_cents || 0) / 100;
-                const right = b.status === 'settled'
-                    ? '<span style="color:' + (payout > 0 ? '#10b981' : 'var(--text2)') + '">' + (payout > 0 ? '+' + payout : '-' + (b.stake_cents || 0) / 100) + ' ETB</span>'
-                    : '<span>pending</span>';
-                return '<div class="keno-payout-row"><span>' + b.round_id + ' · ' + (b.hits !== null && b.hits !== undefined ? b.hits + ' hits' : '—') + '</span>' + right + '</div>';
-            }).join('');
+            host.textContent = '';
+            bets.slice(0, 8).forEach(b => {
+                const payout = (Number(b.payout_cents) || 0) / 100;
+                const settled = b.status === 'settled';
+                const row = document.createElement('div');
+                row.className = 'keno-payout-row';
+                const left = document.createElement('span');
+                left.textContent = String(b.round_id || '') + ' · ' +
+                    (b.hits === null || b.hits === undefined ? '—' : (Number(b.hits) || 0) + ' hits');
+                const right = document.createElement('span');
+                if (settled) {
+                    right.style.color = payout > 0 ? '#10b981' : 'var(--text2)';
+                    right.textContent = (payout > 0 ? '+' + payout : '-' + (Number(b.stake_cents) || 0) / 100) + ' ETB';
+                } else {
+                    right.textContent = 'pending';
+                }
+                row.appendChild(left);
+                row.appendChild(right);
+                host.appendChild(row);
+            });
         }
 
         function renderFastKeno() {
@@ -3340,6 +3357,28 @@
         let diceDirection = 'under';
         let diceRolling = false;
         let diceHistory = [];
+        // Mirrors the server's configured RTP for the on-screen preview only.
+        // The real multiplier always comes back with the settled bet.
+        let diceConfig = { faces: 100, min_target: 2, max_target: 99, target_rtp: 0.95 };
+        let diceConfigLoaded = false;
+
+        async function loadDiceConfig() {
+            if (diceConfigLoaded) return;
+            try {
+                const resp = await fetch('/api/games/rules');
+                const data = await readJsonResponse(resp, 'Game rules');
+                if (resp.ok && data && data.ok && data.games && data.games.dice) {
+                    diceConfig = data.games.dice;
+                    diceConfigLoaded = true;
+                    const slider = document.getElementById('diceTargetSlider');
+                    if (slider) {
+                        slider.min = diceConfig.min_target;
+                        slider.max = diceConfig.max_target;
+                    }
+                    updateDiceTarget(slider ? slider.value : 50);
+                }
+            } catch (_e) { /* the preview falls back to the defaults */ }
+        }
 
         function setDiceDirection(dir) {
             diceDirection = dir === 'over' ? 'over' : 'under';
@@ -3355,16 +3394,25 @@
             if (input) input.value = v;
         }
 
+        function diceTargetFromInput(value) {
+            const parsed = parseInt(value, 10);
+            const fallback = Math.round((diceConfig.min_target + diceConfig.max_target) / 2);
+            return Math.max(diceConfig.min_target, Math.min(diceConfig.max_target, Number.isFinite(parsed) ? parsed : fallback));
+        }
+
         function updateDiceTarget(value) {
-            const target = Math.max(2, Math.min(99, parseInt(value, 10) || 50));
+            const target = diceTargetFromInput(value);
             const label = document.getElementById('diceTargetLabel');
             if (label) label.textContent = target;
-            const wins = diceDirection === 'under' ? target - 1 : 100 - target;
+            const faces = diceConfig.faces || 100;
+            const wins = diceDirection === 'under' ? target - 1 : faces - target;
             const chance = document.getElementById('diceChance');
             const mult = document.getElementById('diceMultiplier');
-            if (chance) chance.textContent = wins + '%';
-            // Mirrors the server formula (97% RTP) purely for display.
-            if (mult) mult.textContent = wins > 0 ? (Math.round((97 / wins) * 100) / 100).toFixed(2) + 'x' : '—';
+            if (chance) chance.textContent = Math.round((wins / faces) * 100) + '%';
+            // Same formula as lib/gameMath.js, for display only.
+            if (mult) mult.textContent = wins > 0
+                ? (Math.round(((diceConfig.target_rtp * faces) / wins) * 100) / 100).toFixed(2) + 'x'
+                : '—';
         }
 
         async function playDice() {
@@ -3375,7 +3423,7 @@
                 showToast('Bet must be between 5 and 500 ETB');
                 return;
             }
-            const target = Math.max(2, Math.min(99, parseInt(document.getElementById('diceTargetSlider').value, 10) || 50));
+            const target = diceTargetFromInput(document.getElementById('diceTargetSlider').value);
             const btn = document.getElementById('dicePlayBtn');
             const rollEl = document.getElementById('diceRoll');
             const statusEl = document.getElementById('diceStatus');
@@ -3395,19 +3443,25 @@
                 const data = await readJsonResponse(resp, 'Dice');
                 if (!resp.ok) { showToast('❌ ' + ((data && data.error) || 'Bet failed')); return; }
                 const res = data.result || {};
-                if (rollEl) { rollEl.textContent = res.roll; rollEl.classList.toggle('win', !!res.won); rollEl.classList.toggle('loss', !res.won); }
+                if (rollEl) { rollEl.textContent = Number(res.roll) || 0; rollEl.classList.toggle('win', !!res.won); rollEl.classList.toggle('loss', !res.won); }
                 if (statusEl) {
                     statusEl.textContent = res.won
                         ? 'Won ' + (data.payout || 0) + ' ETB · roll ' + res.roll + ' ' + diceDirection + ' ' + target
                         : 'Lost · roll ' + res.roll + ' was not ' + diceDirection + ' ' + target;
                 }
-                diceHistory.unshift({ roll: res.roll, won: !!res.won });
+                diceHistory.unshift({ roll: Number(res.roll) || 0, won: !!res.won });
                 diceHistory = diceHistory.slice(0, 10);
                 const pills = document.getElementById('diceHistoryPills');
                 if (pills) {
-                    pills.innerHTML = diceHistory.map(h =>
-                        '<div class="avi-pill" style="background:' + (h.won ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)') + ';color:' + (h.won ? '#10b981' : '#ef4444') + '">' + h.roll + '</div>'
-                    ).join('');
+                    pills.textContent = '';
+                    diceHistory.forEach(h => {
+                        const pill = document.createElement('div');
+                        pill.className = 'avi-pill';
+                        pill.style.background = h.won ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)';
+                        pill.style.color = h.won ? '#10b981' : '#ef4444';
+                        pill.textContent = h.roll;
+                        pills.appendChild(pill);
+                    });
                 }
                 if (res.won) { playSound('win'); createConfetti(); } else { playSound('error'); }
                 applyBalance(data.balance);

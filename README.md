@@ -99,7 +99,7 @@ the JSON result it receives and never computes an outcome itself.
 | Fast Keno (pick 1–8) | exact (hypergeometric, 10-of-40 draw) | 0.9500 |
 | Higher/Lower | analytic, conditioned on a decisive (non-push) outcome, for every visible card | exactly 0.9500 |
 | Aviator | analytic, for any cashout target ≤ the 100x payout cap | exactly 0.9500 |
-| Dice | analytic, for every legal target and direction | exactly 0.9700 |
+| Dice | analytic, for every legal target and direction | exactly 0.9500 |
 
 Keno multipliers are solved analytically per pick-count using the exact
 hypergeometric distribution of hits against the 20-of-80 draw, then rounded to
@@ -110,9 +110,11 @@ crash-point formula (`crash = max(1, TARGET_RTP / (1 - r))`) yields an exact
 95% RTP for every cashout target algebraically (see comments in
 `lib/gameMath.js`), independent of player strategy. All of this is verified
 by exact/analytic assertions in `test/gameMath.test.js` — not simulation
-approximations. Dice uses a higher 97% target RTP, which is standard for a
-single-roll game with a player-chosen win probability; its multiplier is
-`0.97 * 100 / winning_faces`, so the RTP is identical for every target.
+approximations. Dice rolls 1–100 and pays `TARGET_RTP * 100 / winning_faces`,
+so its RTP is identical for every target and direction the player picks. The
+Dice screen previews that multiplier using the RTP reported by
+`GET /api/games/rules`, never a hard-coded value, so changing `TARGET_RTP`
+keeps the UI and the server in step.
 
 ### Fast Keno (live rounds)
 

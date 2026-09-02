@@ -101,3 +101,33 @@ test('rng helpers never rely on Math.random and produce values in range', () => 
     assert.ok(f >= 0 && f < 1);
   }
 });
+
+test('dice multiplier gives exactly TARGET_RTP for every legal target and direction', () => {
+  for (let target = gameMath.DICE_MIN_TARGET; target <= gameMath.DICE_MAX_TARGET; target++) {
+    for (const direction of ['under', 'over']) {
+      const wins = gameMath.diceWinningFaces(target, direction);
+      const multiplier = gameMath.diceMultiplier(target, direction);
+      assert.ok(wins > 0, `target ${target} ${direction} must be winnable`);
+      const rtp = (wins / gameMath.DICE_FACES) * multiplier;
+      assert.ok(
+        Math.abs(rtp - gameMath.TARGET_RTP) < 0.01,
+        `target ${target} ${direction} RTP ${rtp} too far from ${gameMath.TARGET_RTP}`
+      );
+    }
+  }
+});
+
+test('dice rejects targets and directions that can never win', () => {
+  assert.equal(gameMath.diceMultiplier(1, 'under'), null);
+  assert.equal(gameMath.diceMultiplier(100, 'over'), null);
+  assert.equal(gameMath.diceMultiplier(50, 'sideways'), null);
+  assert.equal(gameMath.diceMultiplier(50.5, 'under'), null);
+  assert.equal(gameMath.diceMultiplier(NaN, 'under'), null);
+});
+
+test('dice winning face counts match the documented rules', () => {
+  assert.equal(gameMath.diceWinningFaces(50, 'under'), 49);
+  assert.equal(gameMath.diceWinningFaces(50, 'over'), 50);
+  assert.equal(gameMath.diceWinningFaces(2, 'under'), 1);
+  assert.equal(gameMath.diceWinningFaces(99, 'over'), 1);
+});

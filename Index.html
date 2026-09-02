@@ -1248,8 +1248,8 @@
 
                 <div class="keno-payout-table">
                     <div class="pt-title">Odds</div>
-                    <div class="keno-payout-row"><span>Correct guess</span><span>1.9x</span></div>
-                    <div class="keno-payout-row"><span>Equal cards</span><span>Loss (Push)</span></div>
+                    <div class="keno-payout-row"><span>Correct guess</span><span id="hlMultiplierLabel">multiplier varies by card</span></div>
+                    <div class="keno-payout-row"><span>Equal cards</span><span>Push (stake refunded)</span></div>
                 </div>
             </div>
         </div>
@@ -2571,6 +2571,13 @@
             } catch (_e) { /* silent */ }
         }
 
+        // Generates a per-request idempotency key so a dropped/retried bet
+        // response can never be settled twice server-side.
+        function makeIdempotencyKey() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+            return 'idk-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        }
+
         // ===== KENO GAME =====
         let kenoPicked = new Set();
         let kenoPlaying = false;
@@ -2629,7 +2636,7 @@
             try {
                 const resp = await fetch('/api/games/bet', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Idempotency-Key': makeIdempotencyKey() },
                     body: JSON.stringify({ game: 'keno', bet_amount: bet, picks: [...kenoPicked] })
                 });
                 const data = await readJsonResponse(resp, 'Keno bet');
@@ -2710,8 +2717,11 @@
             document.getElementById('hlNextCard').className = 'hl-card';
             const res = document.getElementById('hlResult');
             if (res) res.className = 'hl-result';
-            document.getElementById('hlBtnHigher').disabled = false;
-            document.getElementById('hlBtnLower').disabled = false;
+            // A guess that can never win (e.g. "lower" when the card is an Ace)
+            // is disabled client-side so players aren't tempted into a
+            // guaranteed non-winning wager; the server also rejects it.
+            document.getElementById('hlBtnHigher').disabled = (hlCurrentCardVal >= 13);
+            document.getElementById('hlBtnLower').disabled = (hlCurrentCardVal <= 1);
         }
 
         function setHLBet(val) { document.getElementById('hlBetInput').value = val; }
@@ -2729,7 +2739,7 @@
             try {
                 const resp = await fetch('/api/games/bet', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Idempotency-Key': makeIdempotencyKey() },
                     body: JSON.stringify({ game: 'higher_lower', bet_amount: bet, guess, prev_card: hlCurrentCardVal })
                 });
                 const data = await readJsonResponse(resp, 'HL bet');
@@ -2756,6 +2766,13 @@
                     document.getElementById('hlResultSub').textContent = guess.toUpperCase() + ' was correct!';
                     playSound('win');
                     createConfetti();
+                } else if (res.pushed) {
+                    nextCard.className = 'hl-card';
+                    resultDiv.className = 'hl-result show';
+                    document.getElementById('hlResultEmoji').textContent = '🤝';
+                    document.getElementById('hlResultTitle').textContent = 'Push — Stake Returned';
+                    document.getElementById('hlResultSub').textContent = 'Equal cards (' + CARD_NAMES[res.next_card] + '). Your ' + bet + ' ETB stake was refunded.';
+                    playSound('tap');
                 } else {
                     nextCard.className = 'hl-card lose-card';
                     resultDiv.className = 'hl-result loss show';
@@ -2825,7 +2842,7 @@
             try {
                 const resp = await fetch('/api/games/bet', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + AUTH_TOKEN, 'Idempotency-Key': makeIdempotencyKey() },
                     body: JSON.stringify({ game: 'aviator', bet_amount: bet, cashout_at: cashout })
                 });
                 const data = await readJsonResponse(resp, 'Aviator bet');

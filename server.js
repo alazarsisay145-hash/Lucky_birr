@@ -11,6 +11,8 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { randomUUID } = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const rng = require('./lib/rng');
+const gameMath = require('./lib/gameMath');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 10000;
@@ -881,18 +883,102 @@ app.post('/api/admin/withdrawals/:id/reject', verifyJWT, requireAdmin, async (re
   }
 });
 
-// ===== GAME BET =====
+// ===== GAME BET (server-authoritative engine) =====
+// All wager validation, RNG, payout math, and balance mutation happen here.
+// The browser only ever renders the `result` this endpoint returns.
 const GAME_CONFIGS = {
-  keno: { minBet: 5, maxBet: 500, multiplierRange: [0, 10] },
+  keno: { minBet: 5, maxBet: 500 },
   higher_lower: { minBet: 5, maxBet: 500 },
   aviator: { minBet: 5, maxBet: 1000 }
 };
 
-app.post('/api/games/bet', verifyJWT, async (req, res, next) => {
-  try {
-    const { game, bet_amount, client_seed } = req.body;
-    if (!GAME_CONFIGS[game]) return res.status(400).json({ error: 'Invalid game' });
+const gameBetRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many bets, please slow down.' }
+});
 
+/**
+ * Computes a single round's outcome and payout (in integer cents) using only
+ * server-controlled, cryptographically secure randomness and the fixed,
+ * versioned paytables in lib/gameMath.js. Throws an Error with `.status` for
+ * validation failures so the caller can respond appropriately without ever
+ * touching the database.
+ */
+function computeGameOutcome(game, stakeCents, body) {
+  if (game === 'keno') {
+    const picks = Array.isArray(body.picks) ? [...new Set(body.picks.map(Number))] : [];
+    if (picks.length < 1 || picks.length > 10 || picks.some((n) => !Number.isInteger(n) || n < 1 || n > 80)) {
+      const err = new Error('Pick 1–10 distinct numbers between 1 and 80');
+      err.status = 400;
+      throw err;
+    }
+    const pool = Array.from({ length: gameMath.KENO_TOTAL }, (_, i) => i + 1);
+    const drawn = rng.secureSample(pool, gameMath.KENO_DRAWN);
+    const hits = picks.filter((n) => drawn.includes(n)).length;
+    const multiplier = gameMath.kenoPayoutMultiplier(picks.length, hits);
+    const payoutCents = Math.round(stakeCents * multiplier);
+    const result = {
+      drawn: [...drawn].sort((a, b) => a - b),
+      picks,
+      hits,
+      multiplier,
+      payout: gameMath.fromCents(payoutCents)
+    };
+    return { payoutCents, result, rngMeta: { drawCount: drawn.length } };
+  }
+
+  if (game === 'higher_lower') {
+    const guess = body.guess;
+    if (guess !== 'higher' && guess !== 'lower') {
+      const err = new Error('guess must be "higher" or "lower"');
+      err.status = 400;
+      throw err;
+    }
+    const clientPrevCard = Number(body.prev_card);
+    const prev_card = (Number.isInteger(clientPrevCard) && clientPrevCard >= 1 && clientPrevCard <= gameMath.HL_RANKS)
+      ? clientPrevCard
+      : rng.secureInt(1, gameMath.HL_RANKS + 1);
+    const multiplier = gameMath.higherLowerMultiplier(prev_card, guess);
+    if (multiplier === null) {
+      const err = new Error('This guess cannot win from the current card. Choose the other side.');
+      err.status = 400;
+      throw err;
+    }
+    const next_card = rng.secureInt(1, gameMath.HL_RANKS + 1);
+    const actual = next_card > prev_card ? 'higher' : next_card < prev_card ? 'lower' : 'equal';
+    const won = actual !== 'equal' && guess === actual;
+    const pushed = actual === 'equal';
+    const payoutCents = won ? Math.round(stakeCents * multiplier) : (pushed ? stakeCents : 0);
+    const result = { prev_card, next_card, guess, actual, won, pushed, payout: gameMath.fromCents(payoutCents) };
+    return { payoutCents, result, rngMeta: { prev_card, next_card } };
+  }
+
+  if (game === 'aviator') {
+    const r = rng.secureUnitFloat();
+    const crash_at = gameMath.aviatorCrashPoint(r);
+    const requested = Number(body.cashout_at);
+    const cashoutNum = Math.min(
+      gameMath.AVIATOR_MAX_MULTIPLIER,
+      Math.max(gameMath.AVIATOR_MIN_MULTIPLIER, Number.isFinite(requested) ? requested : gameMath.AVIATOR_MIN_MULTIPLIER)
+    );
+    const won = cashoutNum <= crash_at;
+    const payoutCents = won ? Math.round(stakeCents * cashoutNum) : 0;
+    const result = { crash_at, cashout_at: cashoutNum, won, payout: gameMath.fromCents(payoutCents) };
+    return { payoutCents, result, rngMeta: {} };
+  }
+
+  const err = new Error('Invalid game');
+  err.status = 400;
+  throw err;
+}
+
+app.post('/api/games/bet', gameBetRateLimit, verifyJWT, async (req, res, next) => {
+  try {
+    const { game, bet_amount } = req.body || {};
+    if (!GAME_CONFIGS[game]) return res.status(400).json({ error: 'Invalid game' });
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
     const cfg = GAME_CONFIGS[game];
@@ -900,97 +986,78 @@ app.post('/api/games/bet', verifyJWT, async (req, res, next) => {
     if (!Number.isFinite(betNum) || betNum < cfg.minBet || betNum > cfg.maxBet) {
       return res.status(400).json({ error: `Bet must be between ${cfg.minBet} and ${cfg.maxBet} ETB` });
     }
-
-    const { data: user } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.balance < betNum) return res.status(400).json({ error: 'Insufficient balance' });
-
-    // Deduct bet
-    const { error: deductErr } = await supabase.rpc('debit_balance', { uid: req.user.id, delta: betNum });
-    if (deductErr) return res.status(400).json({ error: 'Insufficient balance' });
-
-    // Compute outcome server-side
-    const serverSeed = randomUUID();
-    let result = null;
-    let payout = 0;
-
-    if (game === 'keno') {
-      const { picks } = req.body;
-      if (!Array.isArray(picks) || picks.length < 1 || picks.length > 10) {
-        await supabase.rpc('credit_balance', { uid: req.user.id, delta: betNum });
-        return res.status(400).json({ error: 'Pick 1–10 numbers' });
-      }
-      const drawn = [];
-      const pool = Array.from({ length: 80 }, (_, i) => i + 1);
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-      for (let i = 0; i < 20; i++) drawn.push(pool[i]);
-      const hits = picks.filter((n) => drawn.includes(n)).length;
-      const kenoPayouts = [0, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256];
-      const multiplier = kenoPayouts[Math.min(hits, 10)];
-      payout = betNum * multiplier;
-      result = { drawn: drawn.sort((a, b) => a - b), picks, hits, multiplier, payout };
-    } else if (game === 'higher_lower') {
-      const { guess, prev_card: clientPrevCard } = req.body;
-      // Client passes the card they were shown; server independently generates next card
-      const prev_card = (Number.isInteger(Number(clientPrevCard)) && Number(clientPrevCard) >= 1 && Number(clientPrevCard) <= 13)
-        ? Number(clientPrevCard)
-        : Math.floor(Math.random() * 13) + 1;
-      const next_card = Math.floor(Math.random() * 13) + 1;
-      const actual = next_card > prev_card ? 'higher' : next_card < prev_card ? 'lower' : 'equal';
-      const won = (guess === 'higher' && actual === 'higher') || (guess === 'lower' && actual === 'lower');
-      payout = won ? Math.round(betNum * 1.9 * 100) / 100 : 0;
-      result = { prev_card, next_card, guess, actual, won, payout };
-    } else if (game === 'aviator') {
-      // Crash point determined server-side
-      const r = Math.random();
-      const crash = Math.max(1.0, Math.min(100, 0.99 / (1 - r)));
-      const crash_at = Math.round(crash * 100) / 100;
-      const { cashout_at } = req.body;
-      // Default to minimum valid cashout (1.1) to avoid guaranteed losses on missing value
-      const cashoutNum = Math.max(1.1, Number(cashout_at) || 1.1);
-      const won = cashoutNum <= crash_at;
-      payout = won ? Math.round(betNum * cashoutNum * 100) / 100 : 0;
-      result = { crash_at, cashout_at: cashoutNum, won, payout };
+    const stakeCents = gameMath.toCents(betNum);
+    if (!Number.isInteger(stakeCents) || stakeCents <= 0) {
+      return res.status(400).json({ error: 'Invalid bet amount' });
     }
 
-    // Credit winnings
-    if (payout > 0) {
-      await supabase.rpc('credit_balance', { uid: req.user.id, delta: payout });
+    // Idempotency key: a client-supplied header lets safe retries (e.g. a
+    // dropped response after the server already settled the round) return
+    // the original result instead of debiting/crediting twice. If the client
+    // does not send one, generate a single-use key so this request is still
+    // internally atomic (no cross-retry protection, but no double-processing
+    // within this single call either).
+    const idempotencyKey = String(req.headers['idempotency-key'] || req.body?.idempotency_key || '').slice(0, 128) || randomUUID();
+
+    let outcome;
+    try {
+      outcome = computeGameOutcome(game, stakeCents, req.body || {});
+    } catch (validationErr) {
+      if (validationErr.status) return res.status(validationErr.status).json({ error: validationErr.message });
+      throw validationErr;
     }
 
-    const profit = payout - betNum;
-
-    // Record bet
-    await supabase.from('game_bets').insert({
-      user_id: req.user.id,
-      game,
-      bet_amount: betNum,
-      payout,
-      profit,
-      result: JSON.stringify(result),
-      server_seed: serverSeed
+    const { data: rpcRows, error: rpcErr } = await supabase.rpc('settle_game_round', {
+      p_user_id: req.user.id,
+      p_game: game,
+      p_math_version: gameMath.MATH_VERSION,
+      p_idempotency_key: idempotencyKey,
+      p_stake_cents: stakeCents,
+      p_payout_cents: outcome.payoutCents,
+      p_outcome: outcome.result,
+      p_rng_meta: outcome.rngMeta
     });
-
-    // Record transaction
-    if (profit !== 0) {
-      await supabase.from('transactions').insert({
-        user_id: req.user.id,
-        amount: profit,
-        type: profit > 0 ? 'game_win' : 'game_loss',
-        description: `${game} game – bet ${betNum} ETB, payout ${payout} ETB`
-      });
+    if (rpcErr) {
+      const msg = /insufficient/i.test(rpcErr.message || '') ? 'Insufficient balance' : 'Bet could not be settled';
+      return res.status(400).json({ error: msg });
     }
+    const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+    if (!row) return res.status(500).json({ error: 'Bet could not be settled' });
 
-    // Return updated balance
-    const { data: updated } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
-
-    return res.json({ ok: true, result, balance: updated?.balance ?? null });
+    const balance = gameMath.fromCents(row.balance_after_cents);
+    return res.json({ ok: true, result: outcome.result, balance, replayed: Boolean(row.replayed) });
   } catch (err) {
     return next(err);
   }
+});
+
+// ===== GAME RULES / RTP DISCLOSURE =====
+app.get('/api/games/rules', (_req, res) => {
+  res.json({
+    ok: true,
+    math_version: gameMath.MATH_VERSION,
+    target_rtp: gameMath.TARGET_RTP,
+    demo_mode: true,
+    games: {
+      keno: {
+        pool: gameMath.KENO_TOTAL,
+        draw_count: gameMath.KENO_DRAWN,
+        paytables: Object.fromEntries(
+          Object.values(gameMath.KENO_TABLES).map((t) => [t.picks, { multipliers: t.multipliers, rtp: t.achievedRtp }])
+        )
+      },
+      higher_lower: {
+        ranks: gameMath.HL_RANKS,
+        tie_rule: 'equal rank is a push — stake fully refunded',
+        target_rtp_conditional_on_decisive_outcome: gameMath.TARGET_RTP
+      },
+      aviator: {
+        target_rtp: gameMath.TARGET_RTP,
+        max_multiplier: gameMath.AVIATOR_MAX_MULTIPLIER,
+        min_multiplier: gameMath.AVIATOR_MIN_MULTIPLIER
+      }
+    }
+  });
 });
 
 // ===== TRANSACTION HISTORY =====

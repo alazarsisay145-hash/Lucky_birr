@@ -68,7 +68,7 @@ create table if not exists withdrawals (
 create index if not exists withdrawals_user_id_idx on withdrawals(user_id);
 create index if not exists withdrawals_status_idx on withdrawals(status);
 
--- ===== GAME BETS TABLE =====
+-- ===== GAME BETS TABLE (legacy summary log — kept for backward compatibility) =====
 create table if not exists game_bets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete set null,
@@ -84,6 +84,33 @@ create table if not exists game_bets (
 create index if not exists game_bets_user_id_idx on game_bets(user_id);
 create index if not exists game_bets_game_idx on game_bets(game);
 create index if not exists game_bets_created_at_idx on game_bets(created_at desc);
+
+-- ===== GAME ROUNDS TABLE =====
+-- Durable, audit-safe record of every server-settled game round. Money is
+-- stored in integer minor units (cents) to avoid floating point drift.
+-- The (user_id, idempotency_key) unique constraint guarantees that retried
+-- requests can never double-charge or double-pay a player.
+create table if not exists game_rounds (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  game text not null check (game in ('keno', 'higher_lower', 'aviator')),
+  math_version text not null,
+  idempotency_key text not null,
+  stake_cents bigint not null check (stake_cents > 0),
+  payout_cents bigint not null default 0 check (payout_cents >= 0),
+  balance_before_cents bigint not null check (balance_before_cents >= 0),
+  balance_after_cents bigint not null check (balance_after_cents >= 0),
+  status text not null default 'settled' check (status in ('settled')),
+  outcome jsonb not null,
+  rng_meta jsonb,
+  created_at timestamptz not null default now(),
+  unique (user_id, idempotency_key)
+);
+
+create index if not exists game_rounds_user_id_idx on game_rounds(user_id);
+create index if not exists game_rounds_game_idx on game_rounds(game);
+create index if not exists game_rounds_created_at_idx on game_rounds(created_at desc);
+create index if not exists game_rounds_math_version_idx on game_rounds(math_version);
 
 -- ===== TRANSACTIONS TABLE =====
 create table if not exists transactions (
@@ -120,6 +147,82 @@ begin
   update users set balance = balance - delta, updated_at = now() where id = uid;
 end;
 $$;
+
+-- settle_game_round: the single atomic entry point used by /api/games/bet.
+-- Validates the authenticated user's balance, locks their row, debits the
+-- stake, credits the payout, and records an immutable game_rounds entry —
+-- all inside one transaction so a round can never be partially applied.
+-- Idempotent: replaying the same (user_id, idempotency_key) simply returns
+-- the original result instead of settling twice, which is what prevents
+-- duplicate/concurrent requests from double-charging or double-paying.
+create or replace function settle_game_round(
+  p_user_id uuid,
+  p_game text,
+  p_math_version text,
+  p_idempotency_key text,
+  p_stake_cents bigint,
+  p_payout_cents bigint,
+  p_outcome jsonb,
+  p_rng_meta jsonb
+) returns table(round_id uuid, balance_after_cents bigint, replayed boolean)
+language plpgsql as $$
+declare
+  existing game_rounds%rowtype;
+  cur_balance numeric;
+  cur_balance_cents bigint;
+  new_balance_cents bigint;
+  new_round_id uuid;
+begin
+  if p_stake_cents is null or p_stake_cents <= 0 then
+    raise exception 'Invalid stake';
+  end if;
+  if p_payout_cents is null or p_payout_cents < 0 then
+    raise exception 'Invalid payout';
+  end if;
+
+  -- Idempotent replay: return the previously settled round unchanged.
+  select * into existing from game_rounds
+    where user_id = p_user_id and idempotency_key = p_idempotency_key;
+  if found then
+    return query select existing.id, existing.balance_after_cents, true;
+    return;
+  end if;
+
+  select balance into cur_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'User not found';
+  end if;
+
+  cur_balance_cents := round(cur_balance * 100)::bigint;
+  new_balance_cents := cur_balance_cents - p_stake_cents + p_payout_cents;
+  if cur_balance_cents < p_stake_cents or new_balance_cents < 0 then
+    raise exception 'Insufficient balance';
+  end if;
+
+  update users set balance = new_balance_cents::numeric / 100, updated_at = now() where id = p_user_id;
+
+  insert into game_rounds (
+    user_id, game, math_version, idempotency_key, stake_cents, payout_cents,
+    balance_before_cents, balance_after_cents, outcome, rng_meta
+  ) values (
+    p_user_id, p_game, p_math_version, p_idempotency_key, p_stake_cents, p_payout_cents,
+    cur_balance_cents, new_balance_cents, p_outcome, p_rng_meta
+  ) returning id into new_round_id;
+
+  if p_payout_cents <> p_stake_cents then
+    insert into transactions(user_id, amount, type, description)
+    values (
+      p_user_id,
+      (p_payout_cents - p_stake_cents)::numeric / 100,
+      case when p_payout_cents > p_stake_cents then 'game_win' else 'game_loss' end,
+      p_game || ' round ' || new_round_id
+    );
+  end if;
+
+  return query select new_round_id, new_balance_cents, false;
+end;
+$$;
+
 
 -- ===== ROW LEVEL SECURITY =====
 -- Enable RLS on all tables. The service role key used by the backend bypasses RLS.

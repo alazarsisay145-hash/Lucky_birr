@@ -856,13 +856,14 @@
         </div>
         <div class="auth-note">Use this same page to register or sign in. Admin access has no separate URL. It appears after signing in with a configured admin email.</div>
         <div class="auth-setup-status" id="authSetupStatus"></div>
+        <div class="auth-setup-status" id="authFatalStatus"></div>
 
         <!-- Login Screen -->
         <div class="auth-screen active" id="screenLoginAuth">
             <div class="auth-card">
                 <div class="auth-title">Welcome back</div>
                 <div id="loginError" class="auth-error"></div>
-                <div class="auth-form">
+                <form class="auth-form" id="loginForm" novalidate>
                     <div class="auth-input-group">
                         <label for="loginEmail">Email</label>
                         <input class="auth-input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
@@ -871,9 +872,9 @@
                         <label for="loginPassword">Password</label>
                         <input class="auth-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
                     </div>
-                    <button class="auth-btn" id="loginBtn" onclick="doLogin()">Sign In</button>
-                </div>
-                <div class="auth-link">Don't have an account? <a onclick="showRegisterScreen()">Register</a></div>
+                    <button class="auth-btn" id="loginBtn" type="submit">Sign In</button>
+                </form>
+                <div class="auth-link">Don't have an account? <a id="goToRegister" role="button" tabindex="0" onclick="showRegisterScreen()">Register</a></div>
             </div>
         </div>
 
@@ -882,7 +883,7 @@
             <div class="auth-card">
                 <div class="auth-title">Create account</div>
                 <div id="registerError" class="auth-error"></div>
-                <div class="auth-form">
+                <form class="auth-form" id="registerForm" novalidate>
                     <div class="auth-input-group">
                         <label for="regFullName">Full Name</label>
                         <input class="auth-input" id="regFullName" type="text" placeholder="Abebe Kebede" autocomplete="name">
@@ -905,9 +906,9 @@
                         <label for="regConfirm">Confirm Password</label>
                         <input class="auth-input" id="regConfirm" type="password" placeholder="Repeat password" autocomplete="new-password">
                     </div>
-                    <button class="auth-btn" id="registerBtn" onclick="doRegister()">Create Account</button>
-                </div>
-                <div class="auth-link">Already have an account? <a onclick="showLoginScreen()">Sign In</a></div>
+                    <button class="auth-btn" id="registerBtn" type="submit">Create Account</button>
+                </form>
+                <div class="auth-link">Already have an account? <a id="goToLogin" role="button" tabindex="0" onclick="showLoginScreen()">Sign In</a></div>
             </div>
         </div>
     </div>
@@ -1560,8 +1561,75 @@
         const AUTH_TOKEN_STORAGE_KEY = 'AUTH_TOKEN';
         const LEGACY_AUTH_TOKEN_STORAGE_KEY = 'lb_token';
         const AUTH_LOADING_OPACITY = '0.55';
+        const AUTH_REQUEST_TIMEOUT_MS = 20000;
         let AUTH_TOKEN = null;
         let currentUser = null;
+        let loginRequestInFlight = false;
+        let registerRequestInFlight = false;
+        let authHandlersInstalled = false;
+
+        // Attaches a listener only when the element exists so a single missing
+        // node can never abort the rest of the startup sequence.
+        function bindById(id, eventName, handler, options) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.warn('Missing element for listener:', id, eventName);
+                return null;
+            }
+            el.addEventListener(eventName, handler, options);
+            return el;
+        }
+
+        async function fetchWithTimeout(url, options, timeoutMs) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        function showAuthFatalError(message) {
+            const el = document.getElementById('authFatalStatus');
+            if (!el) return;
+            el.textContent = message;
+            el.classList.add('show');
+        }
+
+        // Installed as early as possible and independently of the rest of the UI
+        // bootstrap so that an unrelated initialisation error can never leave the
+        // Sign In / Create Account buttons inert.
+        function installAuthHandlers() {
+            if (authHandlersInstalled) return true;
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            if (!loginForm || !registerForm) {
+                console.error('Auth forms are missing from the document.');
+                return false;
+            }
+            loginForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                doLogin();
+            });
+            registerForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                doRegister();
+            });
+            bindById('goToRegister', 'click', showRegisterScreen);
+            bindById('goToLogin', 'click', showLoginScreen);
+            authHandlersInstalled = true;
+            return true;
+        }
+
+        try {
+            if (!installAuthHandlers()) {
+                showAuthFatalError('Sign in is unavailable because the page did not load correctly. Please refresh.');
+            }
+        } catch (error) {
+            console.error('Failed to install auth handlers:', error);
+            showAuthFatalError('Sign in is unavailable because the page did not load correctly. Please refresh.');
+        }
 
         function showLoginScreen() {
             document.getElementById('screenLoginAuth').classList.add('active');
@@ -1652,16 +1720,19 @@
 
         function setAuthSetupStatus(message, disableButtons) {
             const el = document.getElementById('authSetupStatus');
-            el.textContent = '';
-            if (message) {
-                el.appendChild(document.createTextNode(message));
-                const retryBtn = document.createElement('button');
-                retryBtn.textContent = 'Retry';
-                retryBtn.onclick = loadAuthSetupStatus;
-                retryBtn.setAttribute('style', 'margin-left:8px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.5);color:#fde68a;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px;');
-                el.appendChild(retryBtn);
+            if (el) {
+                el.textContent = '';
+                if (message) {
+                    el.appendChild(document.createTextNode(message));
+                    const retryBtn = document.createElement('button');
+                    retryBtn.type = 'button';
+                    retryBtn.textContent = 'Retry';
+                    retryBtn.onclick = loadAuthSetupStatus;
+                    retryBtn.setAttribute('style', 'margin-left:8px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.5);color:#fde68a;padding:2px 10px;border-radius:6px;cursor:pointer;font-size:11px;');
+                    el.appendChild(retryBtn);
+                }
+                el.classList.toggle('show', !!message);
             }
-            el.classList.toggle('show', !!message);
             setAuthButtonsDisabled(!!disableButtons);
         }
 
@@ -1706,7 +1777,7 @@
 
         function bindAuthErrorClear(inputIds, errorId) {
             inputIds.forEach((id) => {
-                document.getElementById(id).addEventListener('input', () => setAuthError(errorId, ''));
+                bindById(id, 'input', () => setAuthError(errorId, ''));
             });
         }
 
@@ -1728,6 +1799,7 @@
         }
 
         async function doLogin() {
+            if (loginRequestInFlight) return;
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
             setAuthError('loginError', '');
@@ -1736,30 +1808,35 @@
                 return;
             }
             const btn = document.getElementById('loginBtn');
+            loginRequestInFlight = true;
             setAuthButtonState(btn, true, 'Sign In', '⏳ Signing in...');
             try {
-                const resp = await fetch('/api/auth/login', {
+                const resp = await fetchWithTimeout('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
-                });
+                }, AUTH_REQUEST_TIMEOUT_MS);
                 const data = await readJsonResponse(resp, 'Login response');
                 if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    console.error('Login failed:', resp.status, data);
+                    console.error('Login failed:', resp.status);
                     setAuthError('loginError', getAuthErrorMessage(resp, data, 'Please enter your email and password'));
                 }
             } catch (error) {
-                console.error('Login request failed:', error);
-                setAuthError('loginError', 'Network error. Please try again.');
+                console.error('Login request failed:', error && error.name);
+                setAuthError('loginError', error && error.name === 'AbortError'
+                    ? 'The server took too long to respond. Please try again.'
+                    : 'Network error. Please try again.');
             } finally {
+                loginRequestInFlight = false;
                 setAuthButtonState(btn, false, 'Sign In', '⏳ Signing in...');
             }
         }
 
         async function doRegister() {
+            if (registerRequestInFlight) return;
             const fullName = document.getElementById('regFullName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const phone = document.getElementById('regPhone').value.trim();
@@ -1781,25 +1858,29 @@
             }
 
             const btn = document.getElementById('registerBtn');
+            registerRequestInFlight = true;
             setAuthButtonState(btn, true, 'Create Account', '⏳ Creating account...');
             try {
-                const resp = await fetch('/api/auth/register', {
+                const resp = await fetchWithTimeout('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, phone, password, fullName })
-                });
+                }, AUTH_REQUEST_TIMEOUT_MS);
                 const data = await readJsonResponse(resp, 'Register response');
                 if (resp.ok && data && data.ok && data.token && data.user) {
                     saveAuthSession(data.token, data.user);
                     onAuthSuccess();
                 } else {
-                    console.error('Registration failed:', resp.status, data);
+                    console.error('Registration failed:', resp.status);
                     setAuthError('registerError', getAuthErrorMessage(resp, data, 'Please review your registration details'));
                 }
             } catch (error) {
-                console.error('Registration request failed:', error);
-                setAuthError('registerError', 'Network error. Please try again.');
+                console.error('Registration request failed:', error && error.name);
+                setAuthError('registerError', error && error.name === 'AbortError'
+                    ? 'The server took too long to respond. Please try again.'
+                    : 'Network error. Please try again.');
             } finally {
+                registerRequestInFlight = false;
                 setAuthButtonState(btn, false, 'Create Account', '⏳ Creating account...');
             }
         }
@@ -2271,8 +2352,8 @@
             document.getElementById('sendBtn').disabled = !(screenshotFile && amount && parseInt(amount) > 0 && authed);
         }
 
-        document.getElementById('paymentAmount').addEventListener('input', checkSendReady);
-        document.getElementById('screenshotUpload').addEventListener('keydown', (event) => {
+        bindById('paymentAmount', 'input', checkSendReady);
+        bindById('screenshotUpload', 'keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 document.getElementById('fileInput').click();
@@ -2282,12 +2363,6 @@
             if (event.key === 'Escape') {
                 closeModal();
             }
-        });
-        document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') doLogin();
-        });
-        document.getElementById('regConfirm').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') doRegister();
         });
         bindAuthErrorClear(['loginEmail', 'loginPassword'], 'loginError');
         bindAuthErrorClear(['regFullName', 'regEmail', 'regPhone', 'regPassword', 'regConfirm'], 'registerError');
@@ -3114,11 +3189,23 @@
         }
 
         // Close modals on overlay click
-        document.getElementById('depositModal').addEventListener('click', function(e) { if (e.target === this) closeDepositModal(); });
-        document.getElementById('withdrawModal').addEventListener('click', function(e) { if (e.target === this) closeWithdrawModal(); });
+        bindById('depositModal', 'click', function (e) { if (e.target === this) closeDepositModal(); });
+        bindById('withdrawModal', 'click', function (e) { if (e.target === this) closeWithdrawModal(); });
 
-        initTier('standard');
-        initAuthState();
+        try {
+            initTier('standard');
+        } catch (error) {
+            console.error('Tier initialisation failed:', error);
+        }
+        try {
+            if (!installAuthHandlers()) {
+                showAuthFatalError('Sign in is unavailable because the page did not load correctly. Please refresh.');
+            }
+            initAuthState();
+        } catch (error) {
+            console.error('Auth initialisation failed:', error);
+            showAuthFatalError('Sign in could not start. Please refresh the page.');
+        }
     </script>
 </body>
 </html>

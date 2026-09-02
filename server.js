@@ -9,11 +9,10 @@ const morgan = require('morgan');
 const multer = require('multer');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-const { randomUUID, timingSafeEqual, createHmac } = require('crypto');
+const { randomUUID } = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const rng = require('./lib/rng');
 const gameMath = require('./lib/gameMath');
-const fastKeno = require('./lib/fastKeno');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 10000;
@@ -85,12 +84,7 @@ app.use(
     }
   })
 );
-// The raw body is retained so webhook signatures can be verified against the
-// exact bytes the provider signed.
-app.use(express.json({
-  limit: '1mb',
-  verify: (req, _res, buf) => { req.rawBody = buf; }
-}));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use(
@@ -584,36 +578,6 @@ if (!CHAPA_SECRET_KEY) {
   console.warn('CHAPA_SECRET_KEY is missing. Payment gateway features will not work.');
 }
 
-// Wallet limits are deploy-time configuration only — they are never read from
-// the request body, so a browser can not widen its own limits.
-function envAmount(name, fallback) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-const WALLET_LIMITS = {
-  depositMin: envAmount('DEPOSIT_MIN_ETB', 10),
-  depositMax: envAmount('DEPOSIT_MAX_ETB', 50000),
-  withdrawMin: envAmount('WITHDRAW_MIN_ETB', 50),
-  withdrawMax: envAmount('WITHDRAW_MAX_ETB', 25000)
-};
-
-const PAYMENT_METHODS = ['telebirr', 'dashen', 'cbe'];
-
-const walletRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many wallet requests, please try again later.' }
-});
-
-function requestIdempotencyKey(req) {
-  const raw = req.headers['idempotency-key'] || (req.body && req.body.idempotency_key) || '';
-  const key = String(raw).slice(0, 128).trim();
-  return /^[A-Za-z0-9_.:-]{8,128}$/.test(key) ? key : null;
-}
-
 async function chapaRequest(endpoint, method, body) {
   const response = await fetch(`${CHAPA_API_URL}${endpoint}`, {
     method,
@@ -627,74 +591,20 @@ async function chapaRequest(endpoint, method, body) {
   return { ok: response.ok, status: response.status, data };
 }
 
-/**
- * Verifies a deposit with Chapa and, only when the provider confirms a
- * successful payment for the *stored* amount, credits the wallet exactly once
- * through the `complete_deposit` transaction. Returns the resulting status.
- * Never trusts anything supplied by the browser or the callback body.
- */
-async function verifyAndCreditDeposit(txRef) {
-  const { data: dep } = await supabase
-    .from('deposits')
-    .select('id, user_id, amount, tx_ref, status')
-    .eq('tx_ref', txRef)
-    .maybeSingle();
-
-  if (!dep) return { found: false };
-  if (dep.status !== 'pending') return { found: true, status: dep.status, credited: false, deposit: dep };
-
-  const { ok, data: verifyData } = await chapaRequest(`/transaction/verify/${encodeURIComponent(dep.tx_ref)}`, 'GET');
-  const providerStatus = verifyData && verifyData.data ? verifyData.data.status : null;
-  const verifiedAmount = Number(verifyData && verifyData.data ? verifyData.data.amount : NaN);
-
-  if (!ok || verifyData.status !== 'success' || providerStatus !== 'success') {
-    // Only mark failed when the provider is explicit about it; transient
-    // errors leave the deposit pending so it can be retried/reconciled.
-    if (providerStatus === 'failed' || providerStatus === 'cancelled') {
-      await supabase.from('deposits').update({ status: 'failed' }).eq('id', dep.id).eq('status', 'pending');
-      return { found: true, status: 'failed', credited: false, deposit: dep };
-    }
-    return { found: true, status: 'pending', credited: false, deposit: dep };
-  }
-
-  // Guard against a provider amount that does not match what we recorded.
-  if (Number.isFinite(verifiedAmount) && Math.round(verifiedAmount * 100) !== Math.round(Number(dep.amount) * 100)) {
-    console.warn('Deposit amount mismatch for tx_ref', dep.tx_ref);
-    await supabase.from('deposits').update({ status: 'failed' }).eq('id', dep.id).eq('status', 'pending');
-    return { found: true, status: 'failed', credited: false, deposit: dep };
-  }
-
-  const { data: rows, error } = await supabase.rpc('complete_deposit', { p_tx_ref: dep.tx_ref });
-  if (error) {
-    console.warn('complete_deposit failed:', error.message);
-    return { found: true, status: 'pending', credited: false, deposit: dep };
-  }
-  const row = Array.isArray(rows) ? rows[0] : rows;
-  const credited = Boolean(row && row.credited);
-  if (credited) {
-    await notifyAdmin(`💰 Deposit confirmed\nUser: ${dep.user_id}\nAmount: ${dep.amount} ETB\nRef: ${dep.tx_ref}`, null);
-  }
-  return { found: true, status: 'completed', credited, deposit: dep };
-}
-
 // ===== DEPOSIT – INITIALIZE =====
-app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res, next) => {
+app.post('/api/deposits/initialize', verifyJWT, async (req, res, next) => {
   try {
-    const { amount, currency = 'ETB', return_url } = req.body || {};
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.depositMin || amountNum > WALLET_LIMITS.depositMax) {
-      return res.status(400).json({
-        error: `Deposit must be between ${WALLET_LIMITS.depositMin} and ${WALLET_LIMITS.depositMax} ETB`
-      });
-    }
-    if (currency !== 'ETB') {
-      return res.status(400).json({ error: 'Only ETB deposits are supported' });
-    }
     if (!CHAPA_SECRET_KEY) {
       return res.status(503).json({ error: 'Payment gateway not configured' });
     }
     if (!supabase) {
       return res.status(503).json({ error: 'Database not configured' });
+    }
+
+    const { amount, currency = 'ETB', return_url } = req.body;
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum < 10) {
+      return res.status(400).json({ error: 'Minimum deposit amount is 10 ETB' });
     }
 
     const { data: user } = await supabase
@@ -706,26 +616,6 @@ app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const tx_ref = `LB-DEP-${req.user.id.slice(0, 8)}-${Date.now()}`;
-    // Only allow a return URL that points back at this deployment so the
-    // endpoint can not be used as an open redirect.
-    const siteUrl = process.env.WEBSITE_URL || '';
-    const safeReturnUrl = typeof return_url === 'string' && siteUrl && return_url.startsWith(siteUrl)
-      ? return_url
-      : `${siteUrl}/`;
-
-    // The pending row is written *before* the provider call so a fast callback
-    // always finds a record to reconcile against.
-    const { error: pendingErr } = await supabase.from('deposits').insert({
-      user_id: req.user.id,
-      amount: amountNum,
-      tx_ref,
-      status: 'pending'
-    });
-    if (pendingErr) {
-      console.warn('Deposit record failed:', pendingErr.message);
-      return res.status(500).json({ error: 'Could not start the deposit. Please try again.' });
-    }
-
     const chapaBody = {
       amount: amountNum.toString(),
       currency,
@@ -734,23 +624,25 @@ app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res
       last_name: (user.full_name || 'Player').split(' ').slice(1).join(' ') || 'User',
       phone_number: user.phone || '',
       tx_ref,
-      callback_url: `${siteUrl}/api/deposits/callback`,
-      return_url: safeReturnUrl,
+      callback_url: `${process.env.WEBSITE_URL || ''}/api/deposits/callback`,
+      return_url: return_url || `${process.env.WEBSITE_URL || ''}/`,
       customization: { title: 'Lucky Birr Deposit', description: 'Wallet deposit' }
     };
 
     const { ok, data: chapaData } = await chapaRequest('/transaction/initialize', 'POST', chapaBody);
     if (!ok || chapaData.status !== 'success') {
-      // Never log the full provider payload — it can contain customer data.
-      console.warn('Chapa initialize failed with status:', chapaData && chapaData.status);
-      await supabase.from('deposits').update({ status: 'cancelled' }).eq('tx_ref', tx_ref).eq('status', 'pending');
+      console.warn('Chapa initialize failed:', chapaData);
       return res.status(502).json({ error: 'Payment initialization failed. Please try again.' });
     }
 
-    await supabase
-      .from('deposits')
-      .update({ checkout_url: chapaData.data?.checkout_url || null })
-      .eq('tx_ref', tx_ref);
+    // Record pending deposit in DB
+    await supabase.from('deposits').insert({
+      user_id: req.user.id,
+      amount: amountNum,
+      tx_ref,
+      status: 'pending',
+      checkout_url: chapaData.data?.checkout_url || null
+    });
 
     return res.json({ ok: true, checkout_url: chapaData.data?.checkout_url, tx_ref });
   } catch (err) {
@@ -759,73 +651,60 @@ app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res
 });
 
 // ===== DEPOSIT – CALLBACK (Chapa webhook) =====
-// Idempotent by construction: the credit happens inside `complete_deposit`,
-// which only transitions a deposit out of `pending` once. Replayed or
-// duplicated callbacks therefore return 200 without crediting again.
 app.post('/api/deposits/callback', async (req, res) => {
   try {
-    // Chapa signs the raw request body with HMAC-SHA256 keyed on the webhook
-    // secret and sends the hex digest in the header.
+    // Verify this came from Chapa using a shared webhook secret
     const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET || '';
     if (webhookSecret) {
-      const signature = String(req.headers['chapa-signature'] || req.headers['x-chapa-signature'] || '');
-      const expected = createHmac('sha256', webhookSecret)
-        .update(req.rawBody || Buffer.alloc(0))
-        .digest('hex');
-      const received = Buffer.from(signature, 'utf8');
-      const expectedBuf = Buffer.from(expected, 'utf8');
-      if (received.length !== expectedBuf.length || !timingSafeEqual(received, expectedBuf)) {
+      const signature = req.headers['chapa-signature'] || '';
+      if (signature !== webhookSecret) {
         return res.sendStatus(403);
       }
     }
 
-    const { tx_ref, status } = req.body || {};
-    if (!tx_ref || typeof tx_ref !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(tx_ref)) {
+    const { tx_ref, status } = req.body;
+    if (!tx_ref || typeof tx_ref !== 'string' || !/^[A-Za-z0-9_-]+$/.test(tx_ref)) {
       return res.sendStatus(400);
     }
     if (!supabase) return res.sendStatus(503);
 
-    if (status === 'failed' || status === 'cancelled') {
-      // A negative callback is only a hint — still confirm with the provider
-      // before writing a terminal state, and never credit on it.
-      await verifyAndCreditDeposit(tx_ref);
-      return res.sendStatus(200);
-    }
+    const { data: dep } = await supabase
+      .from('deposits')
+      .select('*')
+      .eq('tx_ref', tx_ref)
+      .maybeSingle();
 
-    const outcome = await verifyAndCreditDeposit(tx_ref);
-    if (!outcome.found) return res.sendStatus(404);
+    if (!dep) return res.sendStatus(404);
+    if (dep.status === 'completed') return res.sendStatus(200);
+
+    // Always use the tx_ref stored in DB (not user input) for the Chapa verify URL
+    const safeTxRef = dep.tx_ref;
+
+    if (status === 'success') {
+      // Verify with Chapa before crediting
+      const { ok, data: verifyData } = await chapaRequest(`/transaction/verify/${safeTxRef}`, 'GET');
+      if (ok && verifyData.status === 'success' && verifyData.data?.status === 'success') {
+        await supabase.from('deposits').update({ status: 'completed' }).eq('tx_ref', safeTxRef);
+        // Credit user balance
+        await supabase.rpc('credit_balance', { uid: dep.user_id, delta: dep.amount });
+        // Record transaction
+        await supabase.from('transactions').insert({
+          user_id: dep.user_id,
+          amount: dep.amount,
+          type: 'deposit',
+          description: `Deposit via Chapa (${safeTxRef})`
+        });
+        await notifyAdmin(`💰 Deposit confirmed\nUser: ${dep.user_id}\nAmount: ${dep.amount} ETB\nRef: ${safeTxRef}`, null);
+      } else {
+        await supabase.from('deposits').update({ status: 'failed' }).eq('tx_ref', safeTxRef);
+      }
+    } else {
+      await supabase.from('deposits').update({ status: 'failed' }).eq('tx_ref', safeTxRef);
+    }
     return res.sendStatus(200);
   } catch (err) {
     console.error('Deposit callback error:', err.message);
     return res.sendStatus(500);
-  }
-});
-
-// ===== DEPOSIT – SERVER-VERIFIED STATUS =====
-// The browser calls this after returning from the Chapa checkout page. The
-// answer always comes from a fresh provider verification plus our own record —
-// the client can not assert that a payment succeeded.
-app.get('/api/deposits/:txRef/status', verifyJWT, walletRateLimit, async (req, res, next) => {
-  try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const txRef = String(req.params.txRef || '');
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(txRef)) return res.status(400).json({ error: 'Invalid reference' });
-
-    const { data: dep } = await supabase
-      .from('deposits')
-      .select('id, user_id, amount, status, tx_ref, created_at')
-      .eq('tx_ref', txRef)
-      .maybeSingle();
-    if (!dep || dep.user_id !== req.user.id) return res.status(404).json({ error: 'Deposit not found' });
-
-    let status = dep.status;
-    if (status === 'pending' && CHAPA_SECRET_KEY) {
-      const outcome = await verifyAndCreditDeposit(dep.tx_ref);
-      status = outcome.status || status;
-    }
-    return res.json({ ok: true, tx_ref: dep.tx_ref, amount: dep.amount, status });
-  } catch (err) {
-    return next(err);
   }
 });
 
@@ -834,14 +713,13 @@ app.post('/api/deposits/manual', verifyJWT, submitRateLimit, upload.single('scre
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
-    const { amount, payment_method } = req.body || {};
+    const { amount, payment_method } = req.body;
     const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.depositMin || amountNum > WALLET_LIMITS.depositMax) {
-      return res.status(400).json({
-        error: `Deposit must be between ${WALLET_LIMITS.depositMin} and ${WALLET_LIMITS.depositMax} ETB`
-      });
+    if (!Number.isFinite(amountNum) || amountNum < 10) {
+      return res.status(400).json({ error: 'Minimum deposit is 10 ETB' });
     }
-    if (!PAYMENT_METHODS.includes(payment_method)) {
+    const allowed = ['telebirr', 'dashen', 'cbe'];
+    if (!allowed.includes(payment_method)) {
       return res.status(400).json({ error: 'Invalid payment method' });
     }
 
@@ -889,16 +767,18 @@ app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req,
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
 
-    const { data: dep } = await supabase.from('deposits').select('tx_ref, status').eq('id', id).maybeSingle();
+    const { data: dep } = await supabase.from('deposits').select('*').eq('id', id).maybeSingle();
     if (!dep) return res.status(404).json({ error: 'Deposit not found' });
     if (dep.status !== 'pending') return res.status(400).json({ error: 'Deposit already processed' });
 
-    // Credit through the same single-shot transaction used by the webhook so
-    // an approval can never double-credit, even if clicked twice.
-    const { data: rows, error } = await supabase.rpc('complete_deposit', { p_tx_ref: dep.tx_ref });
-    if (error) return res.status(500).json({ error: 'Deposit could not be credited' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.credited) return res.status(400).json({ error: 'Deposit already processed' });
+    await supabase.from('deposits').update({ status: 'completed' }).eq('id', id);
+    await supabase.rpc('credit_balance', { uid: dep.user_id, delta: dep.amount });
+    await supabase.from('transactions').insert({
+      user_id: dep.user_id,
+      amount: dep.amount,
+      type: 'deposit',
+      description: `Manual deposit approved (${dep.tx_ref})`
+    });
 
     return res.json({ ok: true, message: 'Deposit approved and balance credited' });
   } catch (err) {
@@ -906,119 +786,61 @@ app.post('/api/admin/deposits/:id/approve', verifyJWT, requireAdmin, async (req,
   }
 });
 
-app.post('/api/admin/deposits/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
+// ===== WITHDRAWAL REQUEST =====
+app.post('/api/withdrawals', verifyJWT, async (req, res, next) => {
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data, error } = await supabase
-      .from('deposits')
-      .update({ status: 'failed' })
-      .eq('id', req.params.id)
-      .eq('status', 'pending')
-      .select('id');
-    if (error) return res.status(500).json({ error: 'Deposit could not be rejected' });
-    if (!data || data.length === 0) return res.status(400).json({ error: 'Deposit already processed' });
-    return res.json({ ok: true, message: 'Deposit rejected' });
-  } catch (err) {
-    return next(err);
-  }
-});
 
-// ===== WITHDRAWAL REQUEST =====
-// The funds check, the reservation (debit) and the request record all happen
-// inside `request_withdrawal`, a single locking transaction, so concurrent
-// requests can not over-withdraw the same balance.
-app.post('/api/withdrawals', verifyJWT, walletRateLimit, async (req, res, next) => {
-  try {
-    // Payload validation runs before any I/O so malformed requests are cheap
-    // to reject and always answered with the same message.
-    const { amount, payment_method, account_number, account_name } = req.body || {};
+    const { amount, payment_method, account_number, account_name } = req.body;
     const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum < WALLET_LIMITS.withdrawMin || amountNum > WALLET_LIMITS.withdrawMax) {
-      return res.status(400).json({
-        error: `Withdrawal must be between ${WALLET_LIMITS.withdrawMin} and ${WALLET_LIMITS.withdrawMax} ETB`
-      });
+    if (!Number.isFinite(amountNum) || amountNum < 50) {
+      return res.status(400).json({ error: 'Minimum withdrawal is 50 ETB' });
     }
-    if (!PAYMENT_METHODS.includes(payment_method)) {
+    const allowed = ['telebirr', 'dashen', 'cbe'];
+    if (!allowed.includes(payment_method)) {
       return res.status(400).json({ error: 'Invalid payment method' });
     }
-    const accountNumber = typeof account_number === 'string' ? account_number.trim() : '';
-    const accountName = typeof account_name === 'string' ? account_name.trim() : '';
-    if (!/^[0-9+\- ]{6,32}$/.test(accountNumber)) {
-      return res.status(400).json({ error: 'Enter a valid account or phone number' });
+    if (!account_number || !account_name) {
+      return res.status(400).json({ error: 'Account number and name are required' });
     }
-    if (accountName.length < 2 || accountName.length > 80) {
-      return res.status(400).json({ error: 'Enter the account holder name' });
-    }
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
-    const idempotencyKey = requestIdempotencyKey(req) || randomUUID();
-    const { data: rows, error: rpcErr } = await supabase.rpc('request_withdrawal', {
-      p_user_id: req.user.id,
-      p_amount: amountNum,
-      p_payment_method: payment_method,
-      p_account_number: accountNumber,
-      p_account_name: accountName,
-      p_idempotency_key: idempotencyKey
+    // Check balance
+    const { data: user } = await supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.balance < amountNum) return res.status(400).json({ error: 'Insufficient balance' });
+
+    // Deduct balance (hold)
+    const { error: deductErr } = await supabase.rpc('debit_balance', { uid: req.user.id, delta: amountNum });
+    if (deductErr) return res.status(400).json({ error: 'Insufficient balance or balance error' });
+
+    const { data: wd, error: insErr } = await supabase.from('withdrawals').insert({
+      user_id: req.user.id,
+      amount: amountNum,
+      payment_method,
+      account_number,
+      account_name,
+      status: 'pending'
+    }).select('id').single();
+
+    if (insErr) {
+      // Refund the held balance
+      await supabase.rpc('credit_balance', { uid: req.user.id, delta: amountNum });
+      return res.status(500).json({ error: 'Failed to create withdrawal request' });
+    }
+
+    await supabase.from('transactions').insert({
+      user_id: req.user.id,
+      amount: -amountNum,
+      type: 'withdrawal',
+      description: `Withdrawal request via ${payment_method}`
     });
-    if (rpcErr) {
-      const msg = /insufficient/i.test(rpcErr.message || '') ? 'Insufficient balance' : 'Withdrawal could not be created';
-      return res.status(400).json({ error: msg });
-    }
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row) return res.status(500).json({ error: 'Withdrawal could not be created' });
 
-    if (!row.replayed) {
-      await notifyAdmin(
-        `💸 Withdrawal Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}`,
-        null
-      );
-    }
+    await notifyAdmin(
+      `💸 Withdrawal Request\nUser: ${req.user.id}\nAmount: ${amountNum} ETB\nMethod: ${payment_method}\nAccount: ${account_number} (${account_name})`,
+      null
+    );
 
-    return res.status(201).json({
-      ok: true,
-      withdrawalId: row.withdrawal_id,
-      balance: gameMath.fromCents(row.balance_after_cents),
-      replayed: Boolean(row.replayed),
-      status: 'pending',
-      message: 'Withdrawal request submitted. It will be reviewed within 24h.'
-    });
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// ===== WITHDRAWAL – LIST / CANCEL (player) =====
-app.get('/api/withdrawals', verifyJWT, async (req, res, next) => {
-  try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data, error } = await supabase
-      .from('withdrawals')
-      .select('id, amount, payment_method, status, created_at')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    if (error) return res.status(500).json({ error: 'Failed to fetch withdrawals' });
-    return res.json({ ok: true, withdrawals: data || [] });
-  } catch (err) {
-    return next(err);
-  }
-});
-
-app.post('/api/withdrawals/:id/cancel', verifyJWT, walletRateLimit, async (req, res, next) => {
-  try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    // The RPC also re-checks ownership, so a forged id can not cancel and
-    // refund somebody else's withdrawal.
-    const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
-      p_withdrawal_id: req.params.id,
-      p_status: 'cancelled',
-      p_user_id: req.user.id,
-      p_admin_notes: 'Cancelled by player'
-    });
-    if (error) return res.status(404).json({ error: 'Withdrawal not found' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Withdrawal already processed' });
-    return res.json({ ok: true, message: 'Withdrawal cancelled and funds returned' });
+    return res.status(201).json({ ok: true, withdrawalId: wd.id, message: 'Withdrawal request submitted. Will be processed within 24h.' });
   } catch (err) {
     return next(err);
   }
@@ -1028,15 +850,11 @@ app.post('/api/withdrawals/:id/cancel', verifyJWT, walletRateLimit, async (req, 
 app.post('/api/admin/withdrawals/:id/complete', verifyJWT, requireAdmin, async (req, res, next) => {
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
-      p_withdrawal_id: req.params.id,
-      p_status: 'completed',
-      p_user_id: null,
-      p_admin_notes: typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 500) : null
-    });
-    if (error) return res.status(404).json({ error: 'Withdrawal not found' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Already processed' });
+    const { id } = req.params;
+    const { data: wd } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (!wd) return res.status(404).json({ error: 'Withdrawal not found' });
+    if (wd.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+    await supabase.from('withdrawals').update({ status: 'completed' }).eq('id', id);
     return res.json({ ok: true, message: 'Withdrawal marked as completed' });
   } catch (err) {
     return next(err);
@@ -1046,15 +864,19 @@ app.post('/api/admin/withdrawals/:id/complete', verifyJWT, requireAdmin, async (
 app.post('/api/admin/withdrawals/:id/reject', verifyJWT, requireAdmin, async (req, res, next) => {
   try {
     if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-    const { data: rows, error } = await supabase.rpc('resolve_withdrawal', {
-      p_withdrawal_id: req.params.id,
-      p_status: 'rejected',
-      p_user_id: null,
-      p_admin_notes: typeof req.body?.notes === 'string' ? req.body.notes.slice(0, 500) : null
+    const { id } = req.params;
+    const { data: wd } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (!wd) return res.status(404).json({ error: 'Withdrawal not found' });
+    if (wd.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+    await supabase.from('withdrawals').update({ status: 'rejected' }).eq('id', id);
+    // Refund balance
+    await supabase.rpc('credit_balance', { uid: wd.user_id, delta: wd.amount });
+    await supabase.from('transactions').insert({
+      user_id: wd.user_id,
+      amount: wd.amount,
+      type: 'withdrawal_refund',
+      description: 'Withdrawal rejected – balance refunded'
     });
-    if (error) return res.status(404).json({ error: 'Withdrawal not found' });
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row || !row.resolved) return res.status(400).json({ error: 'Already processed' });
     return res.json({ ok: true, message: 'Withdrawal rejected and balance refunded' });
   } catch (err) {
     return next(err);
@@ -1067,9 +889,7 @@ app.post('/api/admin/withdrawals/:id/reject', verifyJWT, requireAdmin, async (re
 const GAME_CONFIGS = {
   keno: { minBet: 5, maxBet: 500 },
   higher_lower: { minBet: 5, maxBet: 500 },
-  aviator: { minBet: 5, maxBet: 1000 },
-  dice: { minBet: 5, maxBet: 500 },
-  fast_keno: { minBet: 5, maxBet: 500 }
+  aviator: { minBet: 5, maxBet: 1000 }
 };
 
 const gameBetRateLimit = rateLimit({
@@ -1150,38 +970,6 @@ function computeGameOutcome(game, stakeCents, body) {
     return { payoutCents, result, rngMeta: {} };
   }
 
-  if (game === 'dice') {
-    const direction = body.direction;
-    if (direction !== 'under' && direction !== 'over') {
-      const err = new Error('direction must be "under" or "over"');
-      err.status = 400;
-      throw err;
-    }
-    const target = Number(body.target);
-    const multiplier = gameMath.diceMultiplier(target, direction);
-    if (multiplier === null) {
-      const err = new Error(
-        `target must be an integer between ${gameMath.DICE_MIN_TARGET} and ${gameMath.DICE_MAX_TARGET}`
-      );
-      err.status = 400;
-      throw err;
-    }
-    const roll = rng.secureInt(1, gameMath.DICE_FACES + 1);
-    const won = direction === 'under' ? roll < target : roll > target;
-    const payoutCents = won ? Math.round(stakeCents * multiplier) : 0;
-    const winChance = gameMath.diceWinningFaces(target, direction) / gameMath.DICE_FACES;
-    const result = {
-      roll,
-      target,
-      direction,
-      won,
-      multiplier,
-      win_chance: winChance,
-      payout: gameMath.fromCents(payoutCents)
-    };
-    return { payoutCents, result, rngMeta: { roll } };
-  }
-
   const err = new Error('Invalid game');
   err.status = 400;
   throw err;
@@ -1191,9 +979,7 @@ app.post('/api/games/bet', gameBetRateLimit, verifyJWT, async (req, res, next) =
   try {
     const { game, bet_amount } = req.body || {};
     if (!GAME_CONFIGS[game]) return res.status(400).json({ error: 'Invalid game' });
-    if (game === 'fast_keno') {
-      return res.status(400).json({ error: 'Fast Keno uses /api/games/fast-keno/bet' });
-    }
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
 
     const cfg = GAME_CONFIGS[game];
     const betNum = Number(bet_amount);
@@ -1221,8 +1007,6 @@ app.post('/api/games/bet', gameBetRateLimit, verifyJWT, async (req, res, next) =
       throw validationErr;
     }
 
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-
     const { data: rpcRows, error: rpcErr } = await supabase.rpc('settle_game_round', {
       p_user_id: req.user.id,
       p_game: game,
@@ -1247,268 +1031,7 @@ app.post('/api/games/bet', gameBetRateLimit, verifyJWT, async (req, res, next) =
   }
 });
 
-// ===== FAST KENO (shared, server-scheduled rapid rounds) =====
-// Timings are deploy-time configuration; clients only *render* the countdown
-// that the server reports, they never decide when a round closes.
-const fastKenoEngine = new fastKeno.FastKenoEngine({
-  bettingMs: Number(process.env.FAST_KENO_BETTING_MS) || 20000,
-  drawingMs: Number(process.env.FAST_KENO_DRAWING_MS) || 6000,
-  resultMs: Number(process.env.FAST_KENO_RESULT_MS) || 6000
-});
-
-const fastKenoBetRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many bets, please slow down.' }
-});
-
-/**
- * Returns the drawn numbers for a round, generating them once and persisting
- * them so that settlement, reconnecting clients, and restarts all observe the
- * same draw. The `ignoreDuplicates` upsert makes concurrent generation safe:
- * whoever loses the race simply reads the stored row back.
- */
-async function ensureFastKenoDraw(roundIndex) {
-  const cached = fastKenoEngine.drawCache.get(roundIndex);
-  if (cached) return cached;
-  if (!fastKenoEngine.isDrawn(roundIndex)) return null;
-  if (!supabase) return fastKenoEngine.getDraw(roundIndex);
-
-  const { data: existing } = await supabase
-    .from('fast_keno_rounds')
-    .select('drawn')
-    .eq('round_index', roundIndex)
-    .maybeSingle();
-  if (existing && Array.isArray(existing.drawn)) {
-    return fastKenoEngine.rememberDraw(roundIndex, existing.drawn);
-  }
-
-  const drawn = fastKeno.defaultDraw();
-  const { error: upsertErr } = await supabase.from('fast_keno_rounds').upsert(
-    {
-      round_index: roundIndex,
-      round_id: fastKenoEngine.roundId(roundIndex),
-      drawn,
-      math_version: gameMath.MATH_VERSION
-    },
-    { onConflict: 'round_index', ignoreDuplicates: true }
-  );
-  if (upsertErr) {
-    // Without a persisted draw two processes could invent different numbers
-    // for the same round, so nothing is cached, shown, or settled: the bets
-    // stay pending and a later pass retries.
-    console.error('Fast Keno draw could not be persisted for round', roundIndex, '-', upsertErr.message);
-    return null;
-  }
-
-  // Re-read so that whichever process won the insert defines the draw for
-  // everyone; our locally generated numbers are discarded if we lost the race.
-  const { data: stored, error: readErr } = await supabase
-    .from('fast_keno_rounds')
-    .select('drawn')
-    .eq('round_index', roundIndex)
-    .maybeSingle();
-  if (readErr || !stored || !Array.isArray(stored.drawn)) {
-    console.error('Fast Keno draw could not be read back for round', roundIndex);
-    return null;
-  }
-  return fastKenoEngine.rememberDraw(roundIndex, stored.drawn);
-}
-
-let fastKenoSettling = false;
-
-/**
- * Settles every pending bet whose round has already been drawn. Safe to call
- * concurrently and repeatedly: `settle_fast_keno_bet` only pays a bet once.
- */
-async function settleDueFastKenoBets() {
-  if (!supabase || fastKenoSettling) return;
-  fastKenoSettling = true;
-  try {
-    const currentIndex = fastKenoEngine.roundAt().index;
-    const { data: bets, error } = await supabase
-      .from('fast_keno_bets')
-      .select('id, user_id, round_index, picks, stake_cents')
-      .eq('status', 'pending')
-      .lte('round_index', currentIndex)
-      .order('round_index', { ascending: true })
-      .limit(200);
-    if (error || !bets || bets.length === 0) return;
-
-    for (const bet of bets) {
-      if (!fastKenoEngine.isDrawn(bet.round_index)) continue;
-      const drawn = await ensureFastKenoDraw(bet.round_index);
-      if (!drawn) continue;
-      const evaluation = fastKeno.evaluateBet(bet.picks || [], drawn, Number(bet.stake_cents));
-      const { error: settleErr } = await supabase.rpc('settle_fast_keno_bet', {
-        p_bet_id: bet.id,
-        p_payout_cents: evaluation.payoutCents,
-        p_hits: evaluation.hits,
-        p_multiplier: evaluation.multiplier,
-        p_matched: evaluation.matched
-      });
-      if (settleErr) console.warn('Fast Keno settlement failed for bet:', settleErr.message);
-    }
-  } catch (err) {
-    console.warn('Fast Keno settlement pass failed:', err.message);
-  } finally {
-    fastKenoSettling = false;
-  }
-}
-
-function fastKenoRoundPayload(round, drawn) {
-  return {
-    id: round.id,
-    index: round.index,
-    phase: round.phase,
-    ms_remaining: round.msRemaining,
-    opens_at: round.opensAt,
-    closes_at: round.closesAt,
-    drawn_at: round.drawnAt,
-    ends_at: round.endsAt,
-    server_time: Date.now(),
-    drawn: drawn || null
-  };
-}
-
-// Public round state (no wagering, no personal data) so the lobby countdown
-// works before sign-in. Personal bet state is only added for a valid token.
-app.get('/api/games/fast-keno/state', async (req, res, next) => {
-  try {
-    const round = fastKenoEngine.roundAt();
-    const drawn = round.phase === fastKeno.PHASE_RESULT ? await ensureFastKenoDraw(round.index) : null;
-    const previous = await ensureFastKenoDraw(round.index - 1);
-
-    const payload = {
-      ok: true,
-      config: {
-        pool: gameMath.FAST_KENO_TOTAL,
-        draw_count: gameMath.FAST_KENO_DRAWN,
-        max_picks: gameMath.FAST_KENO_MAX_PICKS,
-        min_bet: GAME_CONFIGS.fast_keno.minBet,
-        max_bet: GAME_CONFIGS.fast_keno.maxBet,
-        betting_ms: fastKenoEngine.bettingMs,
-        drawing_ms: fastKenoEngine.drawingMs,
-        result_ms: fastKenoEngine.resultMs,
-        paytables: Object.fromEntries(
-          Object.values(gameMath.FAST_KENO_TABLES).map((t) => [t.picks, t.multipliers])
-        )
-      },
-      round: fastKenoRoundPayload(round, drawn),
-      previous_round: previous
-        ? { id: fastKenoEngine.roundId(round.index - 1), drawn: previous }
-        : null,
-      bet: null,
-      recent_bets: []
-    };
-
-    // Resolve the optional bearer token by hand: an invalid or missing token
-    // simply means "no personal data", it must not fail the public state call.
-    const auth = req.headers.authorization || '';
-    if (auth.startsWith('Bearer ') && JWT_SECRET && supabase) {
-      let userId = null;
-      try {
-        userId = jwt.verify(auth.slice(7), JWT_SECRET).id;
-      } catch (_err) {
-        userId = null;
-      }
-      if (userId) {
-        await settleDueFastKenoBets();
-        const { data: bets } = await supabase
-          .from('fast_keno_bets')
-          .select('id, round_index, round_id, picks, stake_cents, payout_cents, hits, multiplier, matched, status, created_at')
-          .eq('user_id', userId)
-          .order('round_index', { ascending: false })
-          .limit(10);
-        const list = bets || [];
-        payload.recent_bets = list;
-        // The bet for the round currently on screen, so a refresh or a
-        // reconnect restores exactly what the player already staked.
-        payload.bet = list.find((b) => b.round_index === round.index)
-          || list.find((b) => b.round_index === round.index - 1)
-          || null;
-      }
-    }
-
-    return res.json(payload);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-app.post('/api/games/fast-keno/bet', fastKenoBetRateLimit, verifyJWT, async (req, res, next) => {
-  try {
-    const cfg = GAME_CONFIGS.fast_keno;
-    const betNum = Number(req.body?.bet_amount);
-    if (!Number.isFinite(betNum) || betNum < cfg.minBet || betNum > cfg.maxBet) {
-      return res.status(400).json({ error: `Bet must be between ${cfg.minBet} and ${cfg.maxBet} ETB` });
-    }
-    const stakeCents = gameMath.toCents(betNum);
-    if (!Number.isInteger(stakeCents) || stakeCents <= 0) {
-      return res.status(400).json({ error: 'Invalid bet amount' });
-    }
-
-    let picks;
-    try {
-      picks = fastKeno.normalisePicks(req.body?.picks);
-    } catch (validationErr) {
-      return res.status(validationErr.status || 400).json({ error: validationErr.message });
-    }
-
-    // The round is taken from the server clock. A client-supplied round id is
-    // only used to detect that the player was looking at an older round.
-    const round = fastKenoEngine.roundAt();
-    const requestedRound = req.body?.round_id;
-    if (typeof requestedRound === 'string' && requestedRound && requestedRound !== round.id) {
-      return res.status(409).json({ error: 'That round has closed. Your bet was not placed.', round: fastKenoRoundPayload(round, null) });
-    }
-    if (round.phase !== fastKeno.PHASE_BETTING) {
-      return res.status(409).json({ error: 'Betting is closed for this round.', round: fastKenoRoundPayload(round, null) });
-    }
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-
-    const idempotencyKey = requestIdempotencyKey(req) || `${round.id}:${req.user.id}`;
-    const { data: rows, error: rpcErr } = await supabase.rpc('place_fast_keno_bet', {
-      p_user_id: req.user.id,
-      p_round_index: round.index,
-      p_round_id: round.id,
-      p_idempotency_key: idempotencyKey,
-      p_math_version: gameMath.MATH_VERSION,
-      p_picks: picks,
-      p_stake_cents: stakeCents
-    });
-    if (rpcErr) {
-      const msg = /insufficient/i.test(rpcErr.message || '') ? 'Insufficient balance' : 'Bet could not be placed';
-      return res.status(400).json({ error: msg });
-    }
-    const row = Array.isArray(rows) ? rows[0] : rows;
-    if (!row) return res.status(500).json({ error: 'Bet could not be placed' });
-
-    return res.status(201).json({
-      ok: true,
-      bet_id: row.bet_id,
-      replayed: Boolean(row.replayed),
-      picks,
-      stake: gameMath.fromCents(stakeCents),
-      balance: gameMath.fromCents(row.balance_after_cents),
-      round: fastKenoRoundPayload(round, null)
-    });
-  } catch (err) {
-    return next(err);
-  }
-});
-
-if (supabase) {
-  // Background settlement so payouts land even when the player closed the tab.
-  const settlementTimer = setInterval(() => {
-    settleDueFastKenoBets().catch(() => {});
-  }, 3000);
-  if (typeof settlementTimer.unref === 'function') settlementTimer.unref();
-}
-
-
+// ===== GAME RULES / RTP DISCLOSURE =====
 app.get('/api/games/rules', (_req, res) => {
   res.json({
     ok: true,
@@ -1532,110 +1055,26 @@ app.get('/api/games/rules', (_req, res) => {
         target_rtp: gameMath.TARGET_RTP,
         max_multiplier: gameMath.AVIATOR_MAX_MULTIPLIER,
         min_multiplier: gameMath.AVIATOR_MIN_MULTIPLIER
-      },
-      fast_keno: {
-        pool: gameMath.FAST_KENO_TOTAL,
-        draw_count: gameMath.FAST_KENO_DRAWN,
-        max_picks: gameMath.FAST_KENO_MAX_PICKS,
-        round_seconds: Math.round(fastKenoEngine.cycleMs / 1000),
-        paytables: Object.fromEntries(
-          Object.values(gameMath.FAST_KENO_TABLES).map((t) => [t.picks, { multipliers: t.multipliers, rtp: t.achievedRtp }])
-        )
-      },
-      dice: {
-        faces: gameMath.DICE_FACES,
-        min_target: gameMath.DICE_MIN_TARGET,
-        max_target: gameMath.DICE_MAX_TARGET,
-        target_rtp: gameMath.TARGET_RTP
       }
-    },
-    limits: Object.fromEntries(
-      Object.entries(GAME_CONFIGS).map(([name, cfg]) => [name, { min_bet: cfg.minBet, max_bet: cfg.maxBet }])
-    )
+    }
   });
 });
 
 // ===== TRANSACTION HISTORY =====
-const TRANSACTION_TYPES = [
-  'deposit', 'withdrawal', 'withdrawal_refund', 'game_win', 'game_loss', 'raffle_bet', 'raffle_win'
-];
-const TRANSACTION_GROUPS = {
-  all: null,
-  deposits: ['deposit'],
-  withdrawals: ['withdrawal', 'withdrawal_refund'],
-  games: ['game_win', 'game_loss', 'raffle_bet', 'raffle_win']
-};
-
 app.get('/api/transactions', verifyJWT, async (req, res, next) => {
   try {
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
-
-    const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
-    const type = typeof req.query.type === 'string' ? req.query.type : '';
-    if (!Object.prototype.hasOwnProperty.call(TRANSACTION_GROUPS, filter)) {
-      return res.status(400).json({ error: 'Invalid filter' });
-    }
-    if (type && !TRANSACTION_TYPES.includes(type)) {
-      return res.status(400).json({ error: 'Invalid transaction type' });
-    }
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-
-    let query = supabase
+    const { data, error, count } = await supabase
       .from('transactions')
       .select('*', { count: 'exact' })
-      .eq('user_id', req.user.id);
-    if (type) query = query.eq('type', type);
-    else if (TRANSACTION_GROUPS[filter]) query = query.in('type', TRANSACTION_GROUPS[filter]);
-
-    const { data, error, count } = await query
+      .eq('user_id', req.user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (error) return res.status(500).json({ error: 'Failed to fetch transactions' });
-    const total = count || 0;
-    return res.json({
-      ok: true,
-      transactions: data || [],
-      total,
-      page,
-      limit,
-      filter,
-      has_more: offset + (data ? data.length : 0) < total
-    });
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// ===== WALLET SUMMARY =====
-// Single source of truth for the wallet screen: available balance, funds that
-// are reserved or awaiting confirmation, and the configured limits.
-app.get('/api/wallet/summary', verifyJWT, async (req, res, next) => {
-  try {
-    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
-
-    const [userRes, pendingWdRes, pendingDepRes] = await Promise.all([
-      supabase.from('users').select('balance').eq('id', req.user.id).maybeSingle(),
-      supabase.from('withdrawals').select('amount').eq('user_id', req.user.id).eq('status', 'pending'),
-      supabase.from('deposits').select('amount').eq('user_id', req.user.id).eq('status', 'pending')
-    ]);
-
-    if (!userRes.data) return res.status(404).json({ error: 'User not found' });
-
-    const sum = (rows) => (rows || []).reduce((acc, row) => acc + Number(row.amount || 0), 0);
-    return res.json({
-      ok: true,
-      balance: Number(userRes.data.balance) || 0,
-      pending_withdrawals: sum(pendingWdRes.data),
-      pending_deposits: sum(pendingDepRes.data),
-      limits: {
-        deposit_min: WALLET_LIMITS.depositMin,
-        deposit_max: WALLET_LIMITS.depositMax,
-        withdraw_min: WALLET_LIMITS.withdrawMin,
-        withdraw_max: WALLET_LIMITS.withdrawMax
-      }
-    });
+    return res.json({ ok: true, transactions: data || [], total: count || 0, page });
   } catch (err) {
     return next(err);
   }

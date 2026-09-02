@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => { const t = setTimeout(resolve, ms); if (t.unref) t.unref(); });
 }
 
 function spawnServer(port) {
@@ -20,11 +20,19 @@ function spawnServer(port) {
 }
 
 async function stopServer(server, getStderr) {
+  if (server.exitCode !== null || server.signalCode !== null) return;
+  const exited = new Promise((resolve) => server.once('exit', resolve));
   server.kill('SIGTERM');
-  await Promise.race([
-    new Promise((resolve) => server.once('exit', resolve)),
-    wait(2000)
-  ]);
+  // A fixed short wait is load-sensitive: when many servers are spawned in one
+  // run a healthy process can need more than a couple of seconds to exit. Wait
+  // generously, then escalate, so the assertion below only fails when the
+  // server genuinely refuses to shut down.
+  const settled = await Promise.race([exited.then(() => 'exited'), wait(15000).then(() => 'timeout')]);
+  if (settled === 'timeout') {
+    server.kill('SIGKILL');
+    await Promise.race([exited, wait(5000)]);
+    assert.fail(`Server did not terminate cleanly. Stderr: ${getStderr()}`);
+  }
   assert.notEqual(server.exitCode, null, `Server did not terminate cleanly. Stderr: ${getStderr()}`);
 }
 

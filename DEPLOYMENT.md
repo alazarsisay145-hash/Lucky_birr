@@ -132,7 +132,7 @@ curl -X POST https://lucky-birr.onrender.com/api/auth/login \
 | `FAST_KENO_DRAWING_MS` | No | `6000` | Fast Keno drawing phase in ms |
 | `FAST_KENO_RESULT_MS` | No | `6000` | Fast Keno result phase in ms |
 
-> **Chapa callback URL:** register `<WEBSITE_URL>/api/payments/chapa/callback`
+> **Chapa callback URL:** register `<WEBSITE_URL>/api/deposits/callback`
 > in the Chapa dashboard and set `CHAPA_WEBHOOK_SECRET` to the same secret.
 > Deposits are only credited after the server re-verifies the transaction with
 > Chapa, so a missed webhook is recovered by the status endpoint the app calls

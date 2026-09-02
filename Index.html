@@ -3446,7 +3446,7 @@
                 if (rollEl) { rollEl.textContent = Number(res.roll) || 0; rollEl.classList.toggle('win', !!res.won); rollEl.classList.toggle('loss', !res.won); }
                 if (statusEl) {
                     statusEl.textContent = res.won
-                        ? 'Won ' + (data.payout || 0) + ' ETB · roll ' + res.roll + ' ' + diceDirection + ' ' + target
+                        ? 'Won ' + (res.payout || 0) + ' ETB · roll ' + res.roll + ' ' + diceDirection + ' ' + target
                         : 'Lost · roll ' + res.roll + ' was not ' + diceDirection + ' ' + target;
                 }
                 diceHistory.unshift({ roll: Number(res.roll) || 0, won: !!res.won });

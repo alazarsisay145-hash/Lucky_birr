@@ -41,7 +41,7 @@ See [`.env.example`](.env.example) for full documentation. Key required variable
 | `FAST_KENO_RESULT_MS` | Optional | Fast Keno result phase (default `6000`) |
 
 The Chapa callback URL to register in the dashboard is
-`<WEBSITE_URL>/api/payments/chapa/callback`.
+`<WEBSITE_URL>/api/deposits/callback`.
 
 ## Supabase Setup
 
@@ -136,7 +136,10 @@ round index = floor(server_time / (FAST_KENO_BETTING_MS + FAST_KENO_DRAWING_MS +
   CSPRNG in `lib/rng.js`, only after the round's draw time has passed, and are
   persisted to `fast_keno_rounds`. The insert ignores duplicates and the row is
   re-read afterwards, so concurrent requests or multiple server instances all
-  converge on the same authoritative draw.
+  converge on the same authoritative draw. If the draw cannot be persisted or
+  read back, it is discarded rather than cached — nothing is displayed or
+  settled against numbers that only one process knows about, and the bets stay
+  `pending` for a later pass.
 - The stake is debited when the bet is placed (`place_fast_keno_bet`), not at
   settlement, which closes the window where a player could stake more than
   their balance across several rounds. `(user_id, round_index)` and
@@ -176,7 +179,7 @@ resulting balance.
 | `GET /api/transactions` | Paginated history; `filter=all\|deposits\|withdrawals\|games`, optional `type` |
 | `POST /api/deposits/initialize` | Creates a `pending` deposit **before** calling Chapa, returns the checkout URL |
 | `GET /api/deposits/:txRef/status` | Re-verifies a deposit with Chapa on demand (used after the checkout redirect) |
-| `POST /api/payments/chapa/callback` | Chapa webhook; signature-checked, then verified against Chapa before crediting |
+| `POST /api/deposits/callback` | Chapa webhook; signature-checked, then verified against Chapa before crediting |
 | `POST /api/withdrawals` | Requests a withdrawal, atomically reserving the funds |
 | `GET /api/withdrawals` | The player's own withdrawal requests |
 | `POST /api/withdrawals/:id/cancel` | Cancels a still-pending request and refunds the reservation |
@@ -186,8 +189,10 @@ resulting balance.
   and compare the amount the provider reports against the stored deposit
   amount; only then does `complete_deposit` credit the wallet. That function
   is guarded on `status = 'pending'`, so a replayed webhook is a no-op.
-- Webhook signatures are compared with `crypto.timingSafeEqual`, and provider
-  payloads are never logged in full.
+- The webhook signature is an HMAC-SHA256 of the **raw request body** keyed on
+  `CHAPA_WEBHOOK_SECRET`, compared with `crypto.timingSafeEqual`, so a captured
+  signature cannot authenticate a different payload. Provider payloads are
+  never logged in full.
 - A transient verification failure leaves the deposit `pending` — only an
   explicit `failed`/`cancelled` status from Chapa marks it failed.
 - Withdrawals debit and reserve the funds in `request_withdrawal` at request
@@ -206,7 +211,7 @@ resulting balance.
 2. Set `CHAPA_SECRET_KEY` to a **test** key (`CHASECK_TEST-...`) and
    `CHAPA_WEBHOOK_SECRET` to the secret configured in the Chapa dashboard,
    with the webhook URL pointing at `WEBSITE_URL` +
-   `/api/payments/chapa/callback`.
+   `/api/deposits/callback`.
 3. Start the server, register a user, and open **Games → Fast Keno**. The
    countdown, the round id, and the previous round's numbers are visible
    without signing in; placing a bet requires a session.

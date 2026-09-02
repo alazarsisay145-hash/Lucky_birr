@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const jwt = require('jsonwebtoken');
+const { createHmac } = require('node:crypto');
 
 const JWT_SECRET = 'test-jwt-secret-32-chars-exactly!!';
 
@@ -141,6 +142,13 @@ test('transaction history validates filters and requires a token', async () => {
   });
 });
 
+const WEBHOOK_SECRET = 'webhook-secret-value';
+
+// Chapa signs the raw request body with HMAC-SHA256 keyed on the webhook secret.
+function chapaSignature(body, secret = WEBHOOK_SECRET) {
+  return createHmac('sha256', secret).update(body).digest('hex');
+}
+
 test('deposit callback rejects a wrong or missing webhook signature', async () => {
   await withServer(3146, async () => {
     const base = 'http://127.0.0.1:3146';
@@ -157,18 +165,42 @@ test('deposit callback rejects a wrong or missing webhook signature', async () =
       body: JSON.stringify({ tx_ref: 'LB-DEP-abc-1', status: 'success' })
     });
     assert.equal(missing.status, 403);
-  }, { CHAPA_WEBHOOK_SECRET: 'webhook-secret-value' });
+  }, { CHAPA_WEBHOOK_SECRET: WEBHOOK_SECRET });
 });
 
 test('deposit callback with a valid signature still rejects a malformed reference', async () => {
+  const body = JSON.stringify({ tx_ref: '../../etc/passwd', status: 'success' });
   await withServer(3147, async () => {
     const resp = await fetch('http://127.0.0.1:3147/api/deposits/callback', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Chapa-Signature': 'webhook-secret-value' },
-      body: JSON.stringify({ tx_ref: '../../etc/passwd', status: 'success' })
+      headers: { 'Content-Type': 'application/json', 'Chapa-Signature': chapaSignature(body) },
+      body
     });
     assert.equal(resp.status, 400);
-  }, { CHAPA_WEBHOOK_SECRET: 'webhook-secret-value' });
+  }, { CHAPA_WEBHOOK_SECRET: WEBHOOK_SECRET });
+});
+
+test('deposit callback accepts an HMAC signature over the exact request body', async () => {
+  const body = JSON.stringify({ tx_ref: 'LB-DEP-abc-1', status: 'success' });
+  await withServer(3154, async () => {
+    const base = 'http://127.0.0.1:3154';
+    const accepted = await fetch(base + '/api/deposits/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Chapa-Signature': chapaSignature(body) },
+      body
+    });
+    // The signature passes, so the request reaches the database guard rather
+    // than being rejected as unauthenticated.
+    assert.equal(accepted.status, 503);
+
+    // The same signature must not authenticate a different payload.
+    const tampered = await fetch(base + '/api/deposits/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Chapa-Signature': chapaSignature(body) },
+      body: JSON.stringify({ tx_ref: 'LB-DEP-attacker-1', status: 'success' })
+    });
+    assert.equal(tampered.status, 403);
+  }, { CHAPA_WEBHOOK_SECRET: WEBHOOK_SECRET });
 });
 
 test('Fast Keno round state is public, server-timed and hides the draw while betting', async () => {

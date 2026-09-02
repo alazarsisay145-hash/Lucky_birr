@@ -9,7 +9,7 @@ const morgan = require('morgan');
 const multer = require('multer');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-const { randomUUID, timingSafeEqual } = require('crypto');
+const { randomUUID, timingSafeEqual, createHmac } = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const rng = require('./lib/rng');
 const gameMath = require('./lib/gameMath');
@@ -85,7 +85,12 @@ app.use(
     }
   })
 );
-app.use(express.json({ limit: '1mb' }));
+// The raw body is retained so webhook signatures can be verified against the
+// exact bytes the provider signed.
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, _res, buf) => { req.rawBody = buf; }
+}));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use(
@@ -759,13 +764,17 @@ app.post('/api/deposits/initialize', verifyJWT, walletRateLimit, async (req, res
 // duplicated callbacks therefore return 200 without crediting again.
 app.post('/api/deposits/callback', async (req, res) => {
   try {
-    // Verify this came from Chapa using a shared webhook secret
+    // Chapa signs the raw request body with HMAC-SHA256 keyed on the webhook
+    // secret and sends the hex digest in the header.
     const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET || '';
     if (webhookSecret) {
       const signature = String(req.headers['chapa-signature'] || req.headers['x-chapa-signature'] || '');
-      const expected = Buffer.from(webhookSecret);
-      const received = Buffer.from(signature);
-      if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+      const expected = createHmac('sha256', webhookSecret)
+        .update(req.rawBody || Buffer.alloc(0))
+        .digest('hex');
+      const received = Buffer.from(signature, 'utf8');
+      const expectedBuf = Buffer.from(expected, 'utf8');
+      if (received.length !== expectedBuf.length || !timingSafeEqual(received, expectedBuf)) {
         return res.sendStatus(403);
       }
     }
@@ -1277,7 +1286,7 @@ async function ensureFastKenoDraw(roundIndex) {
   }
 
   const drawn = fastKeno.defaultDraw();
-  await supabase.from('fast_keno_rounds').upsert(
+  const { error: upsertErr } = await supabase.from('fast_keno_rounds').upsert(
     {
       round_index: roundIndex,
       round_id: fastKenoEngine.roundId(roundIndex),
@@ -1286,13 +1295,26 @@ async function ensureFastKenoDraw(roundIndex) {
     },
     { onConflict: 'round_index', ignoreDuplicates: true }
   );
-  const { data: stored } = await supabase
+  if (upsertErr) {
+    // Without a persisted draw two processes could invent different numbers
+    // for the same round, so nothing is cached, shown, or settled: the bets
+    // stay pending and a later pass retries.
+    console.error('Fast Keno draw could not be persisted for round', roundIndex, '-', upsertErr.message);
+    return null;
+  }
+
+  // Re-read so that whichever process won the insert defines the draw for
+  // everyone; our locally generated numbers are discarded if we lost the race.
+  const { data: stored, error: readErr } = await supabase
     .from('fast_keno_rounds')
     .select('drawn')
     .eq('round_index', roundIndex)
     .maybeSingle();
-  const authoritative = stored && Array.isArray(stored.drawn) ? stored.drawn : drawn;
-  return fastKenoEngine.rememberDraw(roundIndex, authoritative);
+  if (readErr || !stored || !Array.isArray(stored.drawn)) {
+    console.error('Fast Keno draw could not be read back for round', roundIndex);
+    return null;
+  }
+  return fastKenoEngine.rememberDraw(roundIndex, stored.drawn);
 }
 
 let fastKenoSettling = false;

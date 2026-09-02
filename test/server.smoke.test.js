@@ -681,6 +681,29 @@ test('game shell includes games lobby, keno, higher/lower and aviator screens', 
   assert.match(html, /Higher \/ Lower/);
 });
 
+test('game shell includes the fast keno and dice screens', () => {
+  const html = readGameShell();
+  assert.match(html, /screenFastKeno/);
+  assert.match(html, /screenDice/);
+  assert.match(html, /placeFastKenoBet/);
+  assert.match(html, /playDice/);
+  // The lobby must be able to reach both new games.
+  assert.match(html, /showTab\('fast_keno'\)/);
+  assert.match(html, /showTab\('dice'\)/);
+  // Outcomes come from the server-authoritative endpoints, never the client.
+  assert.match(html, /\/api\/games\/fast-keno\/state/);
+  assert.match(html, /\/api\/games\/fast-keno\/bet/);
+});
+
+test('game shell reads wallet state from the server summary and paginates transactions', () => {
+  const html = readGameShell();
+  assert.match(html, /\/api\/wallet\/summary/);
+  assert.match(html, /function setTxFilter/);
+  assert.match(html, /has_more/);
+  assert.match(html, /checkDepositReturn/);
+  assert.match(html, /\/api\/deposits\//);
+});
+
 test('game shell includes deposit and withdrawal modals', () => {
   const html = readGameShell();
   assert.match(html, /depositModal/);

@@ -24,6 +24,17 @@ The supported deployment target is **Render** (Node web service). The repository
 2. Paste and run the full contents of [`supabase.sql`](supabase.sql). The file is idempotent – safe to re-run on a fresh project or an existing project without data loss.
    - Creates `users`, `submissions`, and `transactions` tables with constraints and indexes.
    - Creates the `game_rounds` table and `settle_game_round()` function used to atomically settle Keno/Higher-Lower/Aviator bets (integer-cents math, idempotency key, no negative balances). Existing `game_bets`/`debit_balance`/`credit_balance` remain in place; re-running `supabase.sql` on an existing project only adds the new table/function (`CREATE TABLE IF NOT EXISTS` / `CREATE OR REPLACE FUNCTION`), it does not alter or drop existing data.
+   - Creates the `fast_keno_rounds` and `fast_keno_bets` tables plus the
+     `place_fast_keno_bet()` / `settle_fast_keno_bet()` functions used to place
+     and settle live Fast Keno rounds atomically.
+   - Creates the `complete_deposit()`, `request_withdrawal()` and
+     `resolve_withdrawal()` functions used for idempotent, atomic wallet
+     movements.
+   - Runs a `MIGRATIONS FOR EXISTING INSTALLS` block that widens the existing
+     `game_bets`/`game_rounds` game CHECK constraints to accept `dice` and
+     `fast_keno`, adds the `cancelled` status to deposits and withdrawals, and
+     adds `withdrawals.idempotency_key` with a partial unique index. The block
+     is written to be safe to re-run and does not touch existing rows.
    - Creates the `screenshots` storage bucket (idempotent `ON CONFLICT DO NOTHING`).
 3. Copy your project credentials from **Settings → API**:
    - **Project URL** → `SUPABASE_URL`
@@ -111,6 +122,21 @@ curl -X POST https://lucky-birr.onrender.com/api/auth/login \
 | `TELEGRAM_BOT_TOKEN` | No | — | Telegram bot token – enables outbound admin notifications |
 | `ADMIN_CHAT_ID` | No | — | Telegram chat/user ID for notifications |
 | `TELEGRAM_WEBHOOK_SECRET` | No | — | Secret path segment – enables inbound webhook endpoint |
+| `CHAPA_SECRET_KEY` | Payments | — | Chapa secret key. Use a `CHASECK_TEST-` key outside production |
+| `CHAPA_WEBHOOK_SECRET` | Payments | — | Shared secret used to verify the Chapa callback signature |
+| `DEPOSIT_MIN_ETB` | No | `10` | Minimum deposit in ETB, enforced server-side |
+| `DEPOSIT_MAX_ETB` | No | `50000` | Maximum deposit in ETB, enforced server-side |
+| `WITHDRAW_MIN_ETB` | No | `50` | Minimum withdrawal in ETB, enforced server-side |
+| `WITHDRAW_MAX_ETB` | No | `25000` | Maximum withdrawal in ETB, enforced server-side |
+| `FAST_KENO_BETTING_MS` | No | `20000` | Fast Keno betting window in ms |
+| `FAST_KENO_DRAWING_MS` | No | `6000` | Fast Keno drawing phase in ms |
+| `FAST_KENO_RESULT_MS` | No | `6000` | Fast Keno result phase in ms |
+
+> **Chapa callback URL:** register `<WEBSITE_URL>/api/payments/chapa/callback`
+> in the Chapa dashboard and set `CHAPA_WEBHOOK_SECRET` to the same secret.
+> Deposits are only credited after the server re-verifies the transaction with
+> Chapa, so a missed webhook is recovered by the status endpoint the app calls
+> when the player returns from checkout.
 
 > **Note:** `TELEGRAM_WEBHOOK_SECRET` is only required for the inbound `/webhook/:secret` endpoint. It is **not** required for outbound admin notifications (those only need `TELEGRAM_BOT_TOKEN` + `ADMIN_CHAT_ID`).
 
